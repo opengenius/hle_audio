@@ -117,9 +117,9 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
     return res;
 }
 
-void load_store_json(data_state_t* state, const char* json_filename) {
+bool load_store_json(data_state_t* state, const char* json_filename) {
     FILE* fp = fopen(json_filename, "rb");
-    if (!fp) return;
+    if (!fp) return false;
 
     // get file size
     fseek(fp, 0L, SEEK_END);
@@ -188,6 +188,8 @@ void load_store_json(data_state_t* state, const char* json_filename) {
 
         state->events.push_back(event);
     }
+
+    return true;
 }
 
 template <typename Writer>

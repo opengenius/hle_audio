@@ -119,7 +119,15 @@ static std::vector<node_desc_t>* get_child_nodes_ptr_mut(data_state_t* state, co
 
 std::vector<uint8_t> save_store_fb_buffer(const data_state_t* state);
 
-void load_store_json(data_state_t* state, const char* json_filename);
+/**
+ * @brief Init data state from Json file
+ * 
+ * @param state 
+ * @param json_filename 
+ * @return true if loaded successfully
+ * @return false otherwise
+ */
+bool load_store_json(data_state_t* state, const char* json_filename);
 void save_store_json(const data_state_t* state, const char* json_filename);
 
 }

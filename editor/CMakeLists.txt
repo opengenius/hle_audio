@@ -26,7 +26,7 @@ add_subdirectory(libs/imgui)
 # domain layer
 add_subdirectory(logic)
 
-add_executable(hle_editor WIN32
+add_executable(hlea_editor WIN32
     src/main.cpp
     src/app_state.cpp
     src/app_view.cpp
@@ -35,13 +35,13 @@ add_executable(hle_editor WIN32
 
 if (MSVC)
     # Tell MSVC to use main instead of WinMain for Windows subsystem executables
-    set_target_properties(hle_editor PROPERTIES
+    set_target_properties(hlea_editor PROPERTIES
                             LINK_FLAGS "/ENTRY:mainCRTStartup")
 endif()
 
-set_property(TARGET hle_editor PROPERTY CXX_STANDARD 17)
+set_property(TARGET hlea_editor PROPERTY CXX_STANDARD 17)
 
-target_link_libraries(hle_editor 
+target_link_libraries(hlea_editor 
     glfw imgui
     hlea_editor_logic
     hlea_runtime
