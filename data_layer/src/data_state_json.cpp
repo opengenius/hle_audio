@@ -64,12 +64,13 @@ static float value_get_opt_float(const Value& v, const char* key, float def_valu
 }
 
 static unsigned value_get_opt_uint(const Value& v, const char* key, unsigned def_value = 0) {
-    float res = def_value;
+    unsigned res = def_value;
     if (v.HasMember(key)) {
         res = v[key].GetUint();
     }
     return res;
 }
+
 static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
     assert(v.IsObject());
     auto node_type = NodeType_from_str(v[KEY_TYPE].GetString());
