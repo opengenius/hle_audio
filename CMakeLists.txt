@@ -6,14 +6,16 @@ Include(FetchContent)
 
 enable_testing()
 
+option(HLEA_BUILD_EDITOR "Enable the build of editor app." ON)
+option(HLEA_BUILD_TOOL "Enable the build of cli app to compile bank binary." ON)
+
 #
 # Dependecies
 #
 
 # flatbuffers
-# add_subdirectory(../Vendors/flatbuffers flatbuffers)
 FetchContent_Declare(
-    flatbuffers
+  flatbuffers
   GIT_REPOSITORY https://github.com/google/flatbuffers.git
   GIT_TAG        06c5c7ed0bd987a918cf88caafb094f22cdd1721 #v2.0.8
 )
@@ -34,5 +36,9 @@ add_subdirectory(data_layer)
 # runtime library
 add_subdirectory(runtime)
 
-add_subdirectory(editor)
-add_subdirectory(tool)
+if (HLEA_BUILD_EDITOR)
+  add_subdirectory(editor)
+endif()
+if (HLEA_BUILD_TOOL)
+  add_subdirectory(tool)
+endif()
