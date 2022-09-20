@@ -8,21 +8,9 @@ enable_testing()
 
 option(HLEA_BUILD_EDITOR "Enable the build of editor app." ON)
 option(HLEA_BUILD_TOOL "Enable the build of cli app to compile bank binary." ON)
-
-#
-# Dependecies
-#
-
-# flatbuffers
-FetchContent_Declare(
-  flatbuffers
-  GIT_REPOSITORY https://github.com/google/flatbuffers.git
-  GIT_TAG        06c5c7ed0bd987a918cf88caafb094f22cdd1721 #v2.0.8
-)
-
-set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(flatbuffers)
+set(HLEA_FLATC_BUILD_DIR 
+    ${CMAKE_CURRENT_SOURCE_DIR}/build_aux CACHE STRING
+    "Flatbuffers release binary path to build into and run flatc exe from")
 
 #
 # Source modules
@@ -30,11 +18,13 @@ FetchContent_MakeAvailable(flatbuffers)
 
 add_subdirectory(fbs_types)
 
-# data layer
-add_subdirectory(data_layer)
-
 # runtime library
 add_subdirectory(runtime)
+
+# data layer
+if (HLEA_BUILD_EDITOR OR HLEA_BUILD_TOOL)
+  add_subdirectory(data_layer)
+endif()
 
 if (HLEA_BUILD_EDITOR)
   add_subdirectory(editor)

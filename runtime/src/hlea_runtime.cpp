@@ -1065,6 +1065,9 @@ void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const c
             case hle_audio::ActionType::ActionType_break_: {
                 group_break_loop(impl_data, &desc);
                 break;
+            case hle_audio::ActionType::ActionType_none:
+                // do nothing
+                break;
             }
         }
     }
