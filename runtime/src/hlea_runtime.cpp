@@ -5,8 +5,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
-#include <thread>
-#include <atomic>
+#include "alloc_utils.inl"
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -49,18 +48,6 @@ struct repeat_rt_state_t {
     uint32_t iteration_counter;
 };
 
-struct chunked_stack_allocator_t {
-    struct chunk_t {
-        chunk_t* prev;
-    };
-
-    chunk_t* top_chunk;
-    uint32_t top_offset;
-    uint32_t chunk_size;
-};
-
-// 
-
 enum class playing_state_e {
     PLAYING,
     PAUSED,
@@ -69,7 +56,7 @@ enum class playing_state_e {
 
 struct group_data_t {
     hlea_event_bank_t* bank;
-    uint32_t group_index; // index in bank, todo: support groups from multiple bank (add bank ref)
+    uint32_t group_index; // index in bank
     uint32_t obj_id;
 
     playing_state_e state;
@@ -92,12 +79,13 @@ struct event_desc_t {
 
 struct vfs_bridge_t {
     ma_vfs_callbacks cb;
-    const hlea_file_vt_t* file_api_vt;
+    const hlea_file_ti* file_api_vt;
     void* sys;
 };
 
 struct hlea_context_t {
     vfs_bridge_t vfs_impl;
+    allocator_t allocator;
 
     ma_engine engine;
 
@@ -114,29 +102,42 @@ struct hlea_context_t {
     uint16_t active_groups_size;
 };
 
-//
-// ma_allocation_callbacks
-//
-static std::atomic<size_t> s_alloc_counter;
-static void* alloc_Malloc(size_t sz, void* pUserData) {
-    ++s_alloc_counter;
-    return malloc(sz);
+static void* default_malloc_allocate(void* udata, size_t size, size_t alignment) {
+    assert(alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+    return malloc(size);
+    // todo: no aligned_alloc on windows
+    // return std::aligned_alloc(alignment, size);
 }
 
-static void* alloc_Realloc(void* p, size_t sz, void* pUserData) {
-    return realloc(p, sz);
-}
-
-static void  alloc_Free(void* p, void* pUserData) {
-    --s_alloc_counter;
+static void default_malloc_deallocate(void* udata, void* p) {
     free(p);
 }
 
-static const ma_allocation_callbacks g_alloc_cb = {
+static hlea_allocator_ti g_malloc_allocator_vt  = {
+    default_malloc_allocate,
+    default_malloc_deallocate
+};
+
+static void* allocator_bridge_malloc(size_t sz, void* pUserData) {
+    auto alloc = (allocator_t*)pUserData;
+    return allocate(*alloc, sz);
+}
+
+static void* allocator_bridge_realloc(void* p, size_t sz, void* pUserData) {
+    assert(false);
+    return nullptr;
+}
+
+static void  allocator_bridge_free(void* p, void* pUserData) {
+    auto alloc = (allocator_t*)pUserData;
+    deallocate(*alloc, p);
+}
+
+static ma_allocation_callbacks g_allocator_bridge_ma_cb_prototype = {
     nullptr,
-    alloc_Malloc,
-    alloc_Realloc,
-    alloc_Free
+    allocator_bridge_malloc,
+    allocator_bridge_realloc,
+    allocator_bridge_free
 };
 
 /**
@@ -236,7 +237,7 @@ static const ma_vfs_callbacks file_vt_bridge_vfs_cb = {
     vfs_bridge_onInfo
 };
 
-static void init(vfs_bridge_t& impl, const hlea_file_vt_t* file_api_vt, void* sys) {
+static void init(vfs_bridge_t& impl, const hlea_file_ti* file_api_vt, void* sys) {
     impl.cb = file_vt_bridge_vfs_cb;
     impl.file_api_vt = file_api_vt;
     impl.sys = sys;
@@ -246,91 +247,6 @@ static void init(vfs_bridge_t& impl, const hlea_file_vt_t* file_api_vt, void* sy
 static ma_sound s_file_sound;
 static bool s_file_sound_inited;
 static const char* s_wav_path; // file path prefix to use in file loading
-
-template<typename T>
-static inline T align_forward(T p, uint32_t align)
-{
-    assert((align & (align - 1)) == 0);
-
-    uintptr_t pi = (uintptr_t(p) + (align - 1)) & ~(uintptr_t(align) - 1);
-    return (T)pi;
-}
-
-//
-// chunked_stack_allocator_t
-//
-static void init(chunked_stack_allocator_t* inst, uint32_t chunk_size) {
-    *inst = {};
-    inst->chunk_size = chunk_size;
-}
-
-static void deinit(chunked_stack_allocator_t* inst,
-        const ma_allocation_callbacks* pAllocationCallbacks) {
-    while(inst->top_chunk) {
-        // not found in current chunk, so pop it out
-        auto chunk = inst->top_chunk;
-        inst->top_chunk = chunk->prev;
-        ma_free(chunk, pAllocationCallbacks);
-    }
-}
-
-static uint8_t* ptr_for_offset(chunked_stack_allocator_t* inst, size_t offset) {
-    return (uint8_t*)inst->top_chunk + offset;
-}
-
-static void* allocate(chunked_stack_allocator_t* inst, 
-        const ma_allocation_callbacks* pAllocationCallbacks,
-        uint32_t size, uint32_t alignment) {
-
-    // size is bigger than max possible(todo: this doesn't consider alignment)
-    if (inst->chunk_size < size + sizeof(chunked_stack_allocator_t::chunk_t)) return nullptr;
-
-    auto top_ptr = ptr_for_offset(inst, inst->top_offset);
-    uint8_t* top_chunk_end = ptr_for_offset(inst, inst->chunk_size);
-    if (!inst->top_chunk ||
-            top_chunk_end < align_forward(top_ptr, alignment) + size) {
-        auto new_chunk = (chunked_stack_allocator_t::chunk_t*)ma_malloc(inst->chunk_size, pAllocationCallbacks);
-        new_chunk->prev = inst->top_chunk;
-        inst->top_chunk = new_chunk;
-        inst->top_offset = sizeof(chunked_stack_allocator_t::chunk_t);
-    }
-
-    auto res = align_forward(ptr_for_offset(inst, inst->top_offset), alignment);
-    inst->top_offset = res - (uint8_t*)inst->top_chunk + size;
-
-    return res;
-}
-
-template<typename T>
-static inline T* allocate(chunked_stack_allocator_t* inst, 
-        const ma_allocation_callbacks* pAllocationCallbacks) {
-    return (T*)allocate(inst, pAllocationCallbacks, sizeof(T), alignof(T));
-}
-
-static void deallocate(chunked_stack_allocator_t* inst, 
-        const ma_allocation_callbacks* pAllocationCallbacks,
-        void* ptr) {
-    
-    while(inst->top_chunk) {
-        uint8_t* top_chunk_begin = ptr_for_offset(inst, 0);
-        uint8_t* top_chunk_end = ptr_for_offset(inst, inst->chunk_size);
-
-        auto top_ptr = ptr_for_offset(inst, inst->top_offset);
-
-        // detect trying to deallocate in unused chunk range
-        assert(!(top_ptr <= ptr && ptr < top_chunk_end));
-
-        if (top_chunk_begin <= ptr && ptr < top_ptr) {
-            inst->top_offset = (uint32_t)((uint8_t*)ptr - top_chunk_begin);
-            break;
-        }
-
-        // not found in current chunk, so pop it out
-        auto chunk = inst->top_chunk;
-        inst->top_chunk = chunk->prev;
-        ma_free(chunk, pAllocationCallbacks);
-    }
-}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -627,7 +543,7 @@ static void pop_up_state(group_data_t& group) {
     if (!group.state_stack) return;
 
     auto prev_top = group.state_stack->prev;
-    deallocate(&group.state_alloc, &g_alloc_cb, group.state_stack);
+    deallocate(&group.state_alloc, group.state_stack);
     group.state_stack = prev_top;
 }
 
@@ -635,10 +551,10 @@ static bool init_and_push_state(group_data_t& group, const hle_audio::NodeDesc* 
     memory_layout_t layout =  {};
     if (get_state_info(node_desc, &layout)) {
         // todo: use pooled allocator instead of general g_alloc_cb
-        auto new_stack_entry = allocate<state_stack_entry_t>(&group.state_alloc, &g_alloc_cb);
+        auto new_stack_entry = allocate<state_stack_entry_t>(&group.state_alloc);
         new_stack_entry->node_desc = node_desc;
 
-        void* node_state = allocate(&group.state_alloc, &g_alloc_cb, layout.size, layout.alignment);
+        void* node_state = allocate(&group.state_alloc, layout.size, layout.alignment);
         init_state(node_desc, node_state);
         new_stack_entry->state_data = node_state;
 
@@ -752,7 +668,7 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     group.bank = desc->bank;
     group.group_index = desc->group_index;
     group.obj_id = desc->obj_id;
-    init(&group.state_alloc, 256); // todo: control size
+    init(&group.state_alloc, 256, ctx->allocator); // todo: control size
 
     group.sound_id = make_next_sound(ctx, group);
     if (group.sound_id) {
@@ -862,30 +778,36 @@ static void group_active_release(hlea_context_t* ctx, uint32_t active_index) {
     group_data_t& group = ctx->active_groups[active_index];
 
     // clean up state data
-    deinit(&group.state_alloc, &g_alloc_cb);
+    deinit(&group.state_alloc);
 
     // swap remove
     ctx->active_groups[active_index] = ctx->active_groups[ctx->active_groups_size - 1];
     --ctx->active_groups_size;
 }
 
-hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
-    auto ctx = (hlea_context_t*)ma_malloc(sizeof(hlea_context_t), &g_alloc_cb);
-    memset(ctx, 0, sizeof(hlea_context_t));
 
-    
+hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
+
+    allocator_t alloc = {&g_malloc_allocator_vt, nullptr};
+    if (info->allocator_vt) {
+        alloc = allocator_t{info->allocator_vt, info->allocator_udata};
+    }
+
+    auto ctx = allocate_unique<hlea_context_t>(alloc);
+    memset(ctx.get(), 0, sizeof(hlea_context_t));
+    ctx->allocator = alloc;
 
     auto config = ma_engine_config_init();
     if (info->file_api_vt) {
         init(ctx->vfs_impl, info->file_api_vt, info->file_sys);
         config.pResourceManagerVFS = &ctx->vfs_impl;
     }
-    config.allocationCallbacks = g_alloc_cb;
+    config.allocationCallbacks = g_allocator_bridge_ma_cb_prototype;
+    config.allocationCallbacks.pUserData = &ctx->allocator;
 
     ma_result result = ma_engine_init(&config, &ctx->engine);
     if (result != MA_SUCCESS) {
         printf("Failed to initialize audio engine.");
-        ma_free(ctx, &g_alloc_cb);
 
         return nullptr;
     }
@@ -896,7 +818,7 @@ hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
         result = ma_sound_group_init(&ctx->engine, 0, nullptr, &ctx->output_bus_groups[i]);
     }
 
-    return ctx;
+    return ctx.release();
 }
 
 void hlea_destroy(hlea_context_t* ctx) {
@@ -905,8 +827,7 @@ void hlea_destroy(hlea_context_t* ctx) {
     }
     ma_engine_uninit(&ctx->engine);
 
-    ma_free(ctx, &g_alloc_cb);
-    assert(s_alloc_counter == 0);
+    deallocate(ctx->allocator, ctx);
 }
 
 /**

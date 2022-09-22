@@ -1,13 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include "alloc_types.h"
 
 struct hlea_event_bank_t;
 struct hlea_context_t;
 
 enum hlea_file_handle_t : intptr_t;
 
-struct hlea_file_vt_t {
+struct hlea_file_ti {
     hlea_file_handle_t (*open)(void* sys, const char* file_path);
     void (*close)(void* sys, hlea_file_handle_t file);
 
@@ -23,8 +24,11 @@ struct hlea_file_vt_t {
  *  init/deinit context
  */
 struct hlea_context_create_info_t {
-    const hlea_file_vt_t* file_api_vt;
+    const hlea_file_ti* file_api_vt;
     void* file_sys;
+
+    const hlea_allocator_ti* allocator_vt;
+    void* allocator_udata;
 
     uint8_t output_bus_count;
 };
