@@ -17,12 +17,12 @@ static void glfw_error_callback(int error, const char* description)
 int main(int argc, char** argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "invalid params, expected format: <cmd> json_filename wav_path");
+        fprintf(stderr, "invalid params, expected format: <cmd> json_filename sounds_dir_path");
         return 1;
     }
 
     const char* json_filename = argv[1];
-    const char* wavs_path = argv[2];
+    const char* sounds_path = argv[2];
 
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
@@ -84,7 +84,7 @@ int main(int argc, char** argv)
     ImGui::GetStyle().ScaleAllSizes(SCALE);
 
     auto app_state = hle_audio::editor::create_app_state(SCALE);
-    hle_audio::editor::init_with_data(app_state, json_filename, wavs_path);
+    hle_audio::editor::init_with_data(app_state, json_filename, sounds_path);
 
     // Main loop
     while (!glfwWindowShouldClose(window))

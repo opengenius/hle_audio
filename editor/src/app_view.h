@@ -28,7 +28,7 @@ enum class view_action_type_e {
     EVENT_APPEND_ACTION,
     EVENT_FILTER,
 
-    REFRESH_WAV_LIST,
+    REFRESH_SOUND_LIST,
 
     BUS_ADD,
     BUS_RENAME,
@@ -101,8 +101,8 @@ struct view_state_t {
     // add node popup
     node_desc_t add_node_target;
 
-    // wav file list
-    const std::vector<std::string>* wav_files_u8_names_ptr;
+    // sound file list
+    const std::vector<std::string>* sound_files_u8_names_ptr;
     size_t selected_sound_file_index = invalid_index;
 
     std::vector<int> output_bus_volumes;

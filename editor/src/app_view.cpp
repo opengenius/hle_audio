@@ -594,20 +594,20 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     }
 
     //
-    // wav file list
+    // Sound file list
     //
     {
-        auto& file_list = *mut_view_state.wav_files_u8_names_ptr;
+        auto& file_list = *mut_view_state.sound_files_u8_names_ptr;
 
         ImGui::BeginGroup();
         
         ImGui::Text("Sound files (%d):", (int)file_list.size());
         ImGui::SameLine();
         if (ImGui::SmallButton("Refresh")) {
-            action = view_action_type_e::REFRESH_WAV_LIST;
+            action = view_action_type_e::REFRESH_SOUND_LIST;
         }
 
-        ImGui::BeginChild("Wavs", ImVec2(wav_list_width, 0), true);
+        ImGui::BeginChild("Files", ImVec2(wav_list_width, 0), true);
         ImGuiListClipper clipper;
         clipper.Begin((int)file_list.size());
         while (clipper.Step())

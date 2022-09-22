@@ -54,7 +54,7 @@ void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float vol
  * editor api
  * todo: move out of public header to its own implemenation files
  */
-void hlea_set_wav_path(hlea_context_t* ctx, const char* wav_path);
+void hlea_set_sounds_path(hlea_context_t* ctx, const char* sounds_path);
 void hlea_play_file(hlea_context_t* ctx, const char* file_path);
 bool hlea_is_file_playing(hlea_context_t* ctx);
 void hlea_stop_file(hlea_context_t* ctx);

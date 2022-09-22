@@ -16,11 +16,11 @@ struct app_state_t {
     view_state_t view_state;
 
     std::string data_file_path;
-    std::string wav_path;
+    std::string sounds_path;
 
-    // wav file list
-    std::vector<fs::path> wav_files;
-    std::vector<std::string> wav_files_u8_names;
+    // sounds file list
+    std::vector<fs::path> sound_files;
+    std::vector<std::string> sound_files_u8_names;
 
     // player context
     hlea_context_t* runtime_ctx;
@@ -140,13 +140,14 @@ static void perform_redo(app_state_t* state) {
 }
 
 static void refresh_wav_list(app_state_t* state) {
-    state->wav_files.clear();
-    state->wav_files_u8_names.clear();
+    state->sound_files.clear();
+    state->sound_files_u8_names.clear();
 
-    for (const auto & entry : fs::directory_iterator(state->wav_path)) {
-        if (entry.path().extension() == ".wav") {
-            state->wav_files.push_back(entry.path());
-            state->wav_files_u8_names.push_back(entry.path().filename().u8string());
+    for (const auto & entry : fs::directory_iterator(state->sounds_path)) {
+        auto ext = entry.path().extension();
+        if (ext == ".wav" || ext == ".mp3") {
+            state->sound_files.push_back(entry.path());
+            state->sound_files_u8_names.push_back(entry.path().filename().u8string());
         }
     }
 }
@@ -205,9 +206,9 @@ void destroy(app_state_t* state) {
     delete state;
 }
 
-void init_with_data(app_state_t* state, const char* filepath, const char* wav_folder) {
+void init_with_data(app_state_t* state, const char* filepath, const char* sound_folder) {
     state->data_file_path = filepath;
-    state->wav_path = wav_folder;
+    state->sounds_path = sound_folder;
     refresh_wav_list(state);
 
     load_store_json(&state->bl_state.data_state, state->data_file_path.c_str());
@@ -220,7 +221,7 @@ void init_with_data(app_state_t* state, const char* filepath, const char* wav_fo
 
     create_context(state);
 
-    hlea_set_wav_path(state->runtime_ctx, state->wav_path.c_str());
+    hlea_set_sounds_path(state->runtime_ctx, state->sounds_path.c_str());
 
     update_mutable_view_state(state);
 }
@@ -262,7 +263,7 @@ void process_frame(app_state_t* state) {
     view_state.has_undo = has_undo(&state->bl_state.cmds);
     view_state.has_redo = has_redo(&state->bl_state.cmds);
     view_state.has_wav_playing = hlea_is_file_playing(state->runtime_ctx);
-    view_state.wav_files_u8_names_ptr = &state->wav_files_u8_names;
+    view_state.sound_files_u8_names_ptr = &state->sound_files_u8_names;
 
     auto action = build_view(view_state, state->bl_state.data_state);
 
@@ -384,7 +385,7 @@ void process_frame(app_state_t* state) {
         break;
     }
 
-    case view_action_type_e::REFRESH_WAV_LIST:
+    case view_action_type_e::REFRESH_SOUND_LIST:
         refresh_wav_list(state);
         break;
 
@@ -408,7 +409,7 @@ void process_frame(app_state_t* state) {
 
     case view_action_type_e::SOUND_PLAY: {
         auto file_index = view_state.selected_sound_file_index;
-        auto full_path_str = state->wav_files[file_index].u8string();
+        auto full_path_str = state->sound_files[file_index].u8string();
         hlea_play_file(state->runtime_ctx, full_path_str.c_str());
         break;
     }
@@ -441,7 +442,7 @@ void process_frame(app_state_t* state) {
     if (node_action.action_assign_sound) {
         if (node_action.node_desc.type == NodeType_File) {
             auto file_list_index = state->view_state.selected_sound_file_index;
-            const auto& filename = state->wav_files_u8_names[file_list_index];
+            const auto& filename = state->sound_files_u8_names[file_list_index];
             assign_file_node_file(bl_state, node_action.node_desc, filename);
         }
     }

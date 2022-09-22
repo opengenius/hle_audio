@@ -251,7 +251,7 @@ static void init(vfs_bridge_t& impl, const hlea_file_ti* file_api_vt, void* sys)
 // editor statics
 static ma_sound s_file_sound;
 static bool s_file_sound_inited;
-static const char* s_wav_path; // file path prefix to use in file loading
+static const char* s_sounds_path; // file path prefix to use in file loading
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -371,8 +371,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         }
 
         char path_buf[512];
-        if (s_wav_path) {
-            snprintf(path_buf, sizeof(path_buf), "%s/%s", s_wav_path, path);
+        if (s_sounds_path) {
+            snprintf(path_buf, sizeof(path_buf), "%s/%s", s_sounds_path, path);
             path = path_buf;
         }
 
@@ -395,8 +395,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         const char* path = bank->static_data->sound_files()->Get(file_node->file_index())->c_str();
 
         char path_buf[512];
-        if (s_wav_path) {
-            snprintf(path_buf, sizeof(path_buf), "%s/%s", s_wav_path, path);
+        if (s_sounds_path) {
+            snprintf(path_buf, sizeof(path_buf), "%s/%s", s_sounds_path, path);
             path = path_buf;
         }
 
@@ -1011,8 +1011,8 @@ void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float vol
  * editor api
  */
 
-void hlea_set_wav_path(hlea_context_t* ctx, const char* wav_path) {
-    s_wav_path = wav_path;
+void hlea_set_sounds_path(hlea_context_t* ctx, const char* sounds_path) {
+    s_sounds_path = sounds_path;
 }
 
 void hlea_play_file(hlea_context_t* ctx, const char* file_path) {
