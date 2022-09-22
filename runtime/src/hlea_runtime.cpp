@@ -109,12 +109,17 @@ static void* default_malloc_allocate(void* udata, size_t size, size_t alignment)
     // return std::aligned_alloc(alignment, size);
 }
 
+static void* default_malloc_reallocate(void* udata, void* p, size_t size) {
+    return realloc(p, size);
+}
+
 static void default_malloc_deallocate(void* udata, void* p) {
     free(p);
 }
 
 static hlea_allocator_ti g_malloc_allocator_vt  = {
     default_malloc_allocate,
+    default_malloc_reallocate,
     default_malloc_deallocate
 };
 
@@ -124,8 +129,8 @@ static void* allocator_bridge_malloc(size_t sz, void* pUserData) {
 }
 
 static void* allocator_bridge_realloc(void* p, size_t sz, void* pUserData) {
-    assert(false);
-    return nullptr;
+    auto alloc = (allocator_t*)pUserData;
+    return reallocate(*alloc, p, sz);
 }
 
 static void  allocator_bridge_free(void* p, void* pUserData) {

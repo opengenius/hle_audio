@@ -4,8 +4,8 @@
 #include "alloc_types.h"
 
 struct allocator_t {
-    const hlea_allocator_ti* allocator_vt;
-    void* allocator_udata;
+    const hlea_allocator_ti* vt;
+    void* udata;
 };
 
 struct chunked_stack_allocator_t {
@@ -21,15 +21,21 @@ struct chunked_stack_allocator_t {
 };
 
 static void* allocate(const allocator_t& alloc, size_t size, size_t alignment = alignof(std::max_align_t)) {
-    return alloc.allocator_vt->allocate(alloc.allocator_udata, size, alignment);
+    return alloc.vt->allocate(alloc.udata, size, alignment);
+}
+
+static void* reallocate(const allocator_t& alloc, void* p, size_t size) {
+    return alloc.vt->reallocate(alloc.udata, p, size);
+}
+
+static void deallocate(const allocator_t& alloc, void* p) {
+    alloc.vt->deallocate(alloc.udata, p);
 }
 
 template<typename T>
 static inline T* allocate(const allocator_t& alloc) {
     return (T*)allocate(alloc, sizeof(T), alignof(T));
 }
-
-static void deallocate(const allocator_t& alloc, void* p);
 
 struct allocator_deleter_t {
     allocator_t alloc;
@@ -41,10 +47,6 @@ struct allocator_deleter_t {
 template<typename T>
 static inline std::unique_ptr<T, allocator_deleter_t> allocate_unique(const allocator_t& alloc) {
     return std::unique_ptr<T, allocator_deleter_t>(allocate<T>(alloc), {alloc});
-}
-
-static void deallocate(const allocator_t& alloc, void* p) {
-    alloc.allocator_vt->deallocate(alloc.allocator_udata, p);
 }
 
 template<typename T>
