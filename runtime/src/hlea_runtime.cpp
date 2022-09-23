@@ -377,7 +377,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         }
 
         ma_sound_init_from_file(&ctx->engine, 
-                path_buf, MA_SOUND_FLAG_STREAM, 
+                path, MA_SOUND_FLAG_STREAM, 
                 &ctx->output_bus_groups[output_bus_index],
                 nullptr,
                 &sound->engine_sound);
