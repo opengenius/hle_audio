@@ -35,6 +35,9 @@ struct hlea_context_create_info_t {
 hlea_context_t* hlea_create(hlea_context_create_info_t* info);
 void hlea_destroy(hlea_context_t* impl_data);
 
+void hlea_suspend(hlea_context_t* ctx);
+void hlea_wakeup(hlea_context_t* ctx);
+
 /**
  * banks
  */

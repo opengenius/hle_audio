@@ -837,6 +837,14 @@ void hlea_destroy(hlea_context_t* ctx) {
     deallocate(ctx->allocator, ctx);
 }
 
+void hlea_suspend(hlea_context_t* ctx) {
+    ma_engine_stop(&ctx->engine);
+}
+
+void hlea_wakeup(hlea_context_t* ctx) {
+    ma_engine_start(&ctx->engine);
+}
+
 /**
  * init with ma_malloc allocated buffer
  */
