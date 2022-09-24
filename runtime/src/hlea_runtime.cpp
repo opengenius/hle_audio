@@ -360,6 +360,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         const hle_audio::FileNode* file_node) {
     const sound_id_t invalid_id = (sound_id_t)0u;
 
+    const ma_uint32 sound_flags = MA_SOUND_FLAG_NO_PITCH | MA_SOUND_FLAG_NO_SPATIALIZATION;
+
     if (file_node->stream()) {
         const char* path = bank->static_data->sound_files()->Get(file_node->file_index())->c_str();
         
@@ -376,8 +378,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
             path = path_buf;
         }
 
-        ma_sound_init_from_file(&ctx->engine, 
-                path, MA_SOUND_FLAG_STREAM, 
+        ma_sound_init_from_file(&ctx->engine,
+                path, sound_flags | MA_SOUND_FLAG_STREAM, 
                 &ctx->output_bus_groups[output_bus_index],
                 nullptr,
                 &sound->engine_sound);
@@ -437,7 +439,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     //
     result = ma_sound_init_from_data_source(&ctx->engine, 
             &sound->decoder,
-            MA_SOUND_FLAG_ASYNC, 
+            sound_flags | MA_SOUND_FLAG_ASYNC, 
             &ctx->output_bus_groups[output_bus_index], 
             &sound->engine_sound);
 
