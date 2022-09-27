@@ -39,6 +39,11 @@ struct named_group_t {
     node_desc_t node = {};
 };
 
+struct event_t {
+    std::string name{};
+    std::vector<hle_audio::ActionT> actions;
+};
+
 struct output_bus_t {
     std::string name;
 };
@@ -58,7 +63,7 @@ struct data_state_t {
     utils::sparse_vector<node_repeat_t> nodes_repeat;
 
     std::vector<named_group_t> groups;
-    std::vector<EventT> events;
+    std::vector<event_t> events;
 
     std::vector<output_bus_t> output_buses;
 };
@@ -67,11 +72,11 @@ static bool is_action_target_all(const ActionT& action) {
     return action.type == ActionType_stop_all;
 }
 
-static bool is_event_target_group(const EventT& event, size_t group_index) {
-    for (auto& action_ptr : event.actions) {
-        if (is_action_target_all(*action_ptr)) continue;
+static bool is_event_target_group(const event_t& event, size_t group_index) {
+    for (auto& action : event.actions) {
+        if (is_action_target_all(action)) continue;
 
-        if (group_index == action_ptr->target_group_index) {
+        if (group_index == action.target_group_index) {
             return true;
         }
     }

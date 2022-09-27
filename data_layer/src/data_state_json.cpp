@@ -173,18 +173,18 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
     const auto& events_v = document["events"];
     assert(events_v.IsArray());
     for (auto& event_v : events_v.GetArray()) {
-        EventT event = {};
+        event_t event = {};
         event.name = event_v[KEY_NAME].GetString();
 
         const auto& actions_v = event_v[KEY_ACTIONS];
         assert(actions_v.IsArray());
         for (auto& action_v : actions_v.GetArray()) {
-            auto action_ptr = std::make_unique<ActionT>();
-            action_ptr->type = ActionType_from_str(action_v[KEY_TYPE].GetString());
-            action_ptr->target_group_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
-            action_ptr->fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
+            ActionT action = {};
+            action.type = ActionType_from_str(action_v[KEY_TYPE].GetString());
+            action.target_group_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
+            action.fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
 
-            event.actions.push_back(std::move(action_ptr));
+            event.actions.push_back(action);
         }
 
         state->events.push_back(event);
@@ -324,15 +324,15 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
             writer.StartObject();
 
             writer.String(KEY_TYPE);
-            writer.String(EnumNameActionType(action->type));
+            writer.String(EnumNameActionType(action.type));
 
             writer.String(KEY_TARGET_GROUP_INDEX);
-            writer.Uint(action->target_group_index);
+            writer.Uint(action.target_group_index);
             
-            if (action->fade_time > 0.0f) {
+            if (action.fade_time > 0.0f) {
                 writer.String(KEY_FADE_TIME);
 
-                double fade_time = action->fade_time;
+                double fade_time = action.fade_time;
                 fade_time = round(fade_time * 1000) / 1000;
                 writer.Double(fade_time);
                 // writer.Double(action->fade_time);

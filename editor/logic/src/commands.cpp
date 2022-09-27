@@ -93,7 +93,7 @@ std::unique_ptr<cmd_i> node_remove_child_cmd_t::apply(data_state_t* state) const
 std::unique_ptr<cmd_i> event_create_cmd_t::apply(data_state_t* state) const {
     auto& elems = state->events;
     auto insert_it = elems.begin() + index;
-    elems.insert(insert_it, EventT{});
+    elems.insert(insert_it, event_t{});
 
     auto& name_ref = elems[index].name;
     name_ref = "Event " + std::to_string(index);
@@ -113,40 +113,9 @@ std::unique_ptr<cmd_i> event_remove_cmd_t::apply(data_state_t* state) const {
 std::unique_ptr<cmd_i> event_update_cmd_t::apply(data_state_t* state) const {
     auto& obj_ptr = state->events[index];
 
-    auto reverse_cmd = std::make_unique<event_update_cmd_t>(index, obj_ptr.name);
+    auto reverse_cmd = std::make_unique<event_update_cmd_t>(index, obj_ptr);
     
-    obj_ptr.name = name;
-
-    return reverse_cmd;
-}
-
-std::unique_ptr<cmd_i> event_action_add_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = state->events[index];
-    
-    auto& actions = obj_ptr.actions;
-    actions.insert(
-        actions.begin() + action_index,
-        std::make_unique<ActionT>());
-
-    return std::make_unique<event_action_remove_cmd_t>(index, action_index);
-}
-
-std::unique_ptr<cmd_i> event_action_remove_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = state->events[index];
-
-    auto& actions = obj_ptr.actions;
-    actions.erase(actions.begin() + action_index);
-
-    return std::make_unique<event_action_add_cmd_t>(index, action_index);
-}
-
-std::unique_ptr<cmd_i> event_action_update_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = state->events[index];
-    auto& action_ptr = obj_ptr.actions[action_index];
-
-    auto reverse_cmd = std::make_unique<event_action_update_cmd_t>(index, action_index, *action_ptr);
-
-    *action_ptr = action;
+    obj_ptr = data;
 
     return reverse_cmd;
 }

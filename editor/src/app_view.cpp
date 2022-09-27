@@ -149,11 +149,11 @@ static int InputTextCallback(ImGuiInputTextCallbackData* data) {
     return 0;
 }
 
-bool InputText(const char* label, std::string* str, ImGuiInputTextFlags flags) {
+bool InputText(const char* label, const char* hint, std::string* str, ImGuiInputTextFlags flags = 0) {
     IM_ASSERT((flags & ImGuiInputTextFlags_CallbackResize) == 0);
     flags |= ImGuiInputTextFlags_CallbackResize;
 
-    return ImGui::InputText(label, (char*)str->c_str(), str->capacity() + 1, flags, InputTextCallback, str);
+    return ImGui::InputTextWithHint(label, hint, (char*)str->c_str(), str->capacity() + 1, flags, InputTextCallback, str);
 }
 
 }
@@ -249,7 +249,7 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
                 view_action_type_e& action, node_action_data_t& node_action) {
     auto& group_state = mut_view_state.selected_group_state;
 
-    ImGui_std::InputText("name", &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
+    ImGui_std::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
     if (ImGui::IsItemDeactivatedAfterEdit()) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
@@ -362,8 +362,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 events_tab_flags = ImGuiTabItemFlags_SetSelected;
             }
             if (ImGui::BeginTabItem("Events", nullptr, events_tab_flags)) {
-                if (ImGui::InputTextWithHint("Filter", "enter text here", 
-                        mut_view_state.event_filter_str, IM_ARRAYSIZE(mut_view_state.event_filter_str))) {
+                if (ImGui_std::InputText("Filter", "enter text here", 
+                        &mut_view_state.event_filter_str, ImGuiInputTextFlags_AutoSelectAll)) {
                     action = view_action_type_e::EVENT_FILTER;
                 }
 
@@ -443,11 +443,10 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     }
 
     const auto active_event_index = mut_view_state.active_event_index;
-    // auto new_action_index = mut_view_state.active_action_index;
     if (active_event_index != invalid_index) {
         if (ImGui::CollapsingHeader("Event Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto& event_state = mut_view_state.event_state;
-            ImGui::InputText("name##event_name", event_state.name, IM_ARRAYSIZE(event_state.name), ImGuiInputTextFlags_AutoSelectAll);
+            ImGui_std::InputText("name##event_name", nullptr, &event_state.name, ImGuiInputTextFlags_AutoSelectAll);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 action = view_action_type_e::EVENT_UPDATE;
             }
@@ -460,83 +459,69 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 ImGui::TableHeadersRow();
 
                 size_t action_index = 0;
-                auto& event = data_state.events[active_event_index];
-                for (auto& action_ptr : event.actions) {
+                auto& event = mut_view_state.event_state;
+                for (auto& ev_action : event.actions) {
                     ImGui::TableNextRow(0, 20 * mut_view_state.scale);
                     ImGui::PushID((void*)(uintptr_t)action_index);
-
-                    bool action_selected = action_index == mut_view_state.active_action_index;
-                    auto& active_action = mut_view_state.active_action;
 
                     // type
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth(-FLT_MIN);
 
-                    ImGui::BeginDisabled(!action_selected);
-                    int current_index = action_ptr->type;
+                    int current_index = ev_action.type;
                     ImGui::Combo("##type", &current_index, EnumNamesActionType(), ActionType_MAX + 1);
-                    if (current_index != action_ptr->type) {
-                        active_action.type = (ActionType)current_index;
-
-                        // remove when none is selected
-                        if (active_action.type == ActionType_none) {
-                            action = view_action_type_e::EVENT_REMOVE_ACTION;
-                        } else {
-                            action = view_action_type_e::EVENT_UPDATE_ACTION;
-                        }
+                    if (current_index != ev_action.type) {
+                        ev_action.type = (ActionType)current_index;
+                        action = view_action_type_e::EVENT_UPDATE;
                     }
-                    ImGui::EndDisabled();
                     
                     //
                     // target group
                     //
                     ImGui::TableNextColumn();
+
+                    if (ImGui::Button("..")) {
+                        mut_view_state.event_action_cmd_index = action_index;
+                        ImGui::OpenPopup("show_event_action_popup");
+                    }
+                    if (ImGui::BeginPopup("show_event_action_popup")) {
+                        if (ImGui::MenuItem("Remove action")) {
+                            action = view_action_type_e::EVENT_REMOVE_ACTION;
+                        }
+                        if (ImGui::MenuItem("Assign active group")) {
+                            ev_action.target_group_index = active_group_index;
+                            action = view_action_type_e::EVENT_UPDATE;
+                        }
+                        if (ImGui::MenuItem("Show group")) {
+                            mut_view_state.active_group_index = ev_action.target_group_index;
+                        }
+                        ImGui::EndPopup();
+                    }
+
+                    ImGui::SameLine();
                     
                     const char* target_label = "all groups";
-                    if (!is_action_target_all(*action_ptr)) {
-                        auto& group = data_state.groups[action_ptr->target_group_index];
+                    if (!is_action_target_all(ev_action)) {
+                        auto& group = data_state.groups[ev_action.target_group_index];
                         target_label = group.name.c_str();
                     }
                 
-                    if (ImGui::Selectable(target_label, false,//action_selected, 
-                            ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap)) {
-                        mut_view_state.active_action_index = action_index;
-                    }
-                    if (action_selected && 
-                            !is_action_target_all(*action_ptr) &&
-                            active_group_index != invalid_index) {
-
-                        ImGui::SameLine();
-                        if (ImGui::Button("<<<")) {
-                            active_action.target_group_index = active_group_index;
-                            action = view_action_type_e::EVENT_UPDATE_ACTION;
-                        }
-                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                            ImGui::SetTooltip("Assign active group");
-                        }
-                    }
-
+                    ImGui::Text(target_label);
 
                     // fade time
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth(-FLT_MIN);
-                    ImGui::BeginDisabled(!action_selected);
 
                     const char* time_sec_format = "%.3f";
 
-                    float fade_time_read = action_ptr->fade_time;
-                    float* value_ptr = action_selected ? &active_action.fade_time : &fade_time_read;
-
                     const float f32_zero = 0.0f;
                     ImGui::DragScalar("##fade_time", ImGuiDataType_Float, 
-                            value_ptr, 
+                            &ev_action.fade_time, 
                             0.01f,  &f32_zero, nullptr,
                             time_sec_format);
                     if (ImGui::IsItemDeactivatedAfterEdit()) {
-                        action = view_action_type_e::EVENT_UPDATE_ACTION;
+                        action = view_action_type_e::EVENT_UPDATE;
                     }
-
-                    ImGui::EndDisabled();
 
                     ImGui::PopID();
                     ++action_index;
@@ -546,7 +531,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             }
 
             if (ImGui::Button("Add")) {
-                action = view_action_type_e::EVENT_APPEND_ACTION;
+                action = view_action_type_e::EVENT_ADD_ACTION;
             }
 
             ImGui::Separator();

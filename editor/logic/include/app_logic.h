@@ -37,13 +37,10 @@ void update_repeat_node_times(logic_state_t* state, const node_desc_t& node_desc
 void create_event(logic_state_t* state, size_t index);
 void remove_event(logic_state_t* state, size_t index);
 void update_event(logic_state_t* state, size_t event_index, 
-        const char* name);
+        const event_t& event_state);
 
-size_t add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index);
+void add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index);
 void remove_event_action(logic_state_t* state, size_t event_index, size_t action_index);
-void update_event_action(logic_state_t* state,
-        size_t event_index, size_t action_index,
-        const ActionT& action);
 
 void rename_bus(logic_state_t* state, size_t bus_index, const char* new_name);
 

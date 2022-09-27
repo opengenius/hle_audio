@@ -23,9 +23,8 @@ enum class view_action_type_e {
     EVENT_ADD,
     EVENT_REMOVE,
     EVENT_UPDATE,
-    EVENT_UPDATE_ACTION,
+    EVENT_ADD_ACTION,
     EVENT_REMOVE_ACTION,
-    EVENT_APPEND_ACTION,
     EVENT_FILTER,
 
     REFRESH_SOUND_LIST,
@@ -42,10 +41,6 @@ enum class view_action_type_e {
 };
 
 const size_t MAX_NAME_LENGTH = 256;
-
-struct event_edit_data_t {
-    char name[MAX_NAME_LENGTH];
-};
 
 struct bus_edit_data_t {
     size_t index = 0;
@@ -86,7 +81,7 @@ struct view_state_t {
     named_group_t selected_group_state;
 
     // event list
-    char event_filter_str[MAX_NAME_LENGTH] = "";
+    std::string event_filter_str;
     size_t event_filter_group_index = invalid_index;
     size_t groups_size_on_event_filter_group;
     std::vector<size_t> filtered_event_indices;
@@ -94,9 +89,8 @@ struct view_state_t {
 
     // active event
     size_t active_event_index = invalid_index;
-    event_edit_data_t event_state;
-    size_t active_action_index = 0;
-    ActionT active_action;
+    event_t event_state;
+    size_t event_action_cmd_index;
 
     // add node popup
     node_desc_t add_node_target;

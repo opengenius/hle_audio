@@ -19,56 +19,29 @@ void apply_group_update(logic_state_t* state,
     execute_cmd_first(state, std::move(cmd));
 }
 
-void update_event_action(logic_state_t* state,
-        size_t event_index, size_t action_index,
-        const ActionT& action) {
-    auto cmd = std::make_unique<event_action_update_cmd_t>(
-        event_index, action_index, action);
-    execute_cmd_first(state, std::move(cmd));
-}
+void add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index) {
+    auto event = state->data_state.events[event_index];
 
-static void perform_remove_event_action(logic_state_t* state, size_t event_index, size_t action_index) {
-    // reset state
-    const ActionT empty_action = {};
-    execute_cmd(state, 
-        std::make_unique<event_action_update_cmd_t>(
-            event_index, action_index,
-            empty_action));
-    // and remove
-    execute_cmd(state, 
-        std::make_unique<event_action_remove_cmd_t>(
-            event_index, action_index));
+    hle_audio::ActionT act = {};
+    if (target_group_index != invalid_index) {
+        act.target_group_index = target_group_index;
+    }
+    
+    event.actions.push_back(act);
+
+    update_event(state, event_index, event);
 }
 
 void remove_event_action(logic_state_t* state, size_t event_index, size_t action_index) {
-    push_chain_start(&state->cmds);
-    perform_remove_event_action(state, event_index, action_index);
-}
-
-size_t add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index) {
-    auto& event = state->data_state.events[event_index];
+    auto event = state->data_state.events[event_index];
+    event.actions.erase(event.actions.begin() + action_index);
     
-    auto new_action_index = event.actions.size();
-
-    execute_cmd_first(state, 
-        std::make_unique<event_action_add_cmd_t>(
-            event_index, new_action_index));
-
-    // initial setup from selection
-    if (target_group_index != invalid_index) {
-        ActionT action = {};
-        action.target_group_index = static_cast<decltype(action.target_group_index)>(target_group_index);
-        execute_cmd(state, 
-            std::make_unique<event_action_update_cmd_t>(
-                event_index, new_action_index, action));
-    }
-
-    return new_action_index;
+    update_event(state, event_index, event);
 }
 
 void update_event(logic_state_t* state, size_t event_index, 
-        const char* name) {
-    auto cmd = std::make_unique<event_update_cmd_t>(event_index, name);
+        const event_t& event_state) {
+    auto cmd = std::make_unique<event_update_cmd_t>(event_index, event_state);
     execute_cmd_first(state, std::move(cmd));
 }
 
@@ -134,13 +107,7 @@ static void perform_remove_group_root_node_chained(logic_state_t* state, size_t 
 static void perform_remove_event(logic_state_t* state, size_t index) {
     // reset params command to restore on undo
     execute_cmd(state, 
-            std::make_unique<event_update_cmd_t>(index, ""));
-
-    // remove actions
-    auto& event_ptr = state->data_state.events[index];
-    while (event_ptr.actions.size()) {
-        perform_remove_event_action(state, index, event_ptr.actions.size() - 1);
-    }
+            std::make_unique<event_update_cmd_t>(index, event_t{}));
 
     execute_cmd(state, 
         std::make_unique<event_remove_cmd_t>(index));

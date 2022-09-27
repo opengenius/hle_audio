@@ -25,11 +25,11 @@ void create_group(data_state_t* state, size_t group_index) {
     if (group_index < groups.size() - 1) {
         auto& events = state->events;
         for (auto& event_ptr : events) {
-            for (auto& action_ptr : event_ptr.actions) {
-                if (is_action_target_all(*action_ptr)) continue;
+            for (auto& action : event_ptr.actions) {
+                if (is_action_target_all(action)) continue;
 
-                if (group_index <= action_ptr->target_group_index) {
-                    ++action_ptr->target_group_index;
+                if (group_index <= action.target_group_index) {
+                    ++action.target_group_index;
                 }
             }
         }
@@ -45,12 +45,12 @@ void remove_group(data_state_t* state, size_t group_index) {
     // update indices
     auto& events = state->events;
     for (auto& event_ptr : events) {
-        for (auto& action_ptr : event_ptr.actions) {
-            if (is_action_target_all(*action_ptr)) continue;
+        for (auto& action : event_ptr.actions) {
+            if (is_action_target_all(action)) continue;
 
-            assert(group_index != action_ptr->target_group_index);
-            if (group_index < action_ptr->target_group_index) {
-                --action_ptr->target_group_index;
+            assert(group_index != action.target_group_index);
+            if (group_index < action.target_group_index) {
+                --action.target_group_index;
             }
         }
     }

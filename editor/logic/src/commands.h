@@ -160,56 +160,15 @@ public:
 };
 class event_update_cmd_t : public cmd_i {
     size_t index;
-    std::string name;
+    event_t data;
     
 public:
-    event_update_cmd_t(size_t index, const std::string& name) {
+    event_update_cmd_t(size_t index, const event_t& data) {
         this->index = index;
-        this->name = name;
+        this->data = data;
     }
 
     std::unique_ptr<cmd_i> apply(data_state_t* state) const override;    
-};
-
-class event_action_add_cmd_t : public cmd_i {
-    size_t index;
-    size_t action_index;
-    
-public:
-    event_action_add_cmd_t(size_t index, size_t action_index) {
-        this->index = index;
-        this->action_index = action_index;
-    }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
-};
-
-class event_action_remove_cmd_t : public cmd_i {
-    size_t index;
-    size_t action_index;
-    
-public:
-    event_action_remove_cmd_t(size_t index, size_t action_index) {
-        this->index = index;
-        this->action_index = action_index;
-    }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
-};
-
-class event_action_update_cmd_t : public cmd_i {
-    size_t index;
-    size_t action_index;
-    ActionT action;
-    
-public:
-    event_action_update_cmd_t(size_t index, size_t action_index, const ActionT& action) {
-        this->index = index;
-        this->action_index = action_index;
-        this->action = action;
-    }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
 };
 
 class bus_update_cmd_t : public cmd_i {

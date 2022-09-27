@@ -115,7 +115,11 @@ static void save_store_fb_builder(const data_state_t* state, flatbuffers::FlatBu
 
     std::vector<flatbuffers::Offset<hle_audio::Event>> events;
     for (auto& ev : state->events) {
-        events.push_back(CreateEvent(fbb, &ev));
+        std::vector<flatbuffers::Offset<hle_audio::Action>> actions;
+        for (auto& a : ev.actions) {
+            actions.push_back(CreateAction(fbb, &a));
+        }
+        events.push_back(CreateEventDirect(fbb, ev.name.c_str(), &actions));
     }
 
     fbb.Finish(

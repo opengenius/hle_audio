@@ -42,20 +42,6 @@ static void update_active_group(app_state_t* state, size_t selected_group) {
     view_state.selected_group_state = get_group(&state->bl_state.data_state, selected_group);
 }
 
-static void update_selected_event_action(app_state_t* state, size_t action_index) {
-    auto& view_state = state->view_state;
-
-    if (view_state.active_event_index == invalid_index) return;
-
-    auto& event = state->bl_state.data_state.events[view_state.active_event_index];
-
-    if (event.actions.size()) {
-        action_index = event.actions.size() <= action_index ? event.actions.size() - 1 : action_index;
-        view_state.active_action_index = action_index;
-        view_state.active_action = *event.actions[view_state.active_action_index];
-    }
-}
-
 static void update_active_event(app_state_t* state, size_t active_index) {
     auto& view_state = state->view_state;
 
@@ -64,11 +50,7 @@ static void update_active_event(app_state_t* state, size_t active_index) {
     if (active_index == invalid_index) return;
 
     auto& event = state->bl_state.data_state.events[active_index];
-
-    snprintf(view_state.event_state.name, sizeof(view_state.event_state.name), 
-            "%s", event.name.c_str());
-
-    update_selected_event_action(state, 0u);
+    view_state.event_state = event;
 }
 
 static void filter_events(app_state_t* state) {
@@ -115,14 +97,11 @@ static void update_mutable_view_state(app_state_t* state) {
     }
     update_active_group(state, selected_group);
 
-    auto active_action_index = view_state.active_action_index;
-
     auto selected_event_index = view_state.active_event_index;
     if (data_state.events.size() == 0u) {
         selected_event_index = invalid_index;
     }
     update_active_event(state, selected_event_index);
-    update_selected_event_action(state, active_action_index);
 
     filter_events(state);
 }
@@ -254,7 +233,6 @@ void process_frame(app_state_t* state) {
 
     const auto prev_group_index = view_state.active_group_index;
     const auto prev_event_index = view_state.event_list_index;
-    const auto prev_action_index = view_state.active_action_index;
 
     //
     // build up view
@@ -277,9 +255,6 @@ void process_frame(app_state_t* state) {
         auto selected_event_index = view_state.filtered_event_indices[view_state.event_list_index];
         update_active_event(state, selected_event_index);
     }
-
-    if (prev_action_index != view_state.active_action_index)
-        update_selected_event_action(state, view_state.active_action_index);
 
     //
     // modify data state
@@ -330,31 +305,22 @@ void process_frame(app_state_t* state) {
         update_mutable_view_state(state);
         break;
     case view_action_type_e::EVENT_UPDATE:
-        update_event(bl_state, view_state.active_event_index, event_state.name);
+        update_event(bl_state, view_state.active_event_index, event_state);
+        update_mutable_view_state(state);
+        break;
+    case view_action_type_e::EVENT_ADD_ACTION:
+        add_event_action(bl_state, 
+            view_state.active_event_index, view_state.active_group_index);
+        update_mutable_view_state(state);
+        break;
+    case view_action_type_e::EVENT_REMOVE_ACTION:
+        remove_event_action(bl_state, 
+            view_state.active_event_index, view_state.event_action_cmd_index);
         update_mutable_view_state(state);
         break;
     case view_action_type_e::EVENT_FILTER:
         filter_events(state);
         break;
-    case view_action_type_e::EVENT_UPDATE_ACTION:
-        update_event_action(bl_state, 
-            view_state.active_event_index, 
-            view_state.active_action_index, 
-            view_state.active_action);
-        break;
-    case view_action_type_e::EVENT_REMOVE_ACTION:
-        remove_event_action(bl_state, 
-            view_state.active_event_index, 
-            view_state.active_action_index);
-        update_selected_event_action(state, 
-            view_state.active_action_index);
-        break;
-    case view_action_type_e::EVENT_APPEND_ACTION: {
-        auto new_action_index = add_event_action(bl_state, 
-            view_state.active_event_index, view_state.active_group_index);
-        update_selected_event_action(state, new_action_index);
-        break;
-    }
 
     case view_action_type_e::NODE_ADD: {
         if (view_state.add_node_type) {
