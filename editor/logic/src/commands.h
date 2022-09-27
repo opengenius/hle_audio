@@ -89,34 +89,6 @@ public:
     std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
 };
 
-class node_file_update_cmd_t : public cmd_i {
-    utils::index_id_t index;
-    file_node_t node_data;
-
-public:
-    node_file_update_cmd_t(utils::index_id_t index, 
-            const file_node_t& node_data) {
-        this->index = index;
-        this->node_data = node_data;
-    }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
-};
-
-class node_repeat_update_cmd_t : public cmd_i {
-    utils::index_id_t index;
-    node_repeat_t node_data;
-
-public:
-    node_repeat_update_cmd_t(utils::index_id_t index, 
-            const node_repeat_t& node_data) {
-        this->index = index;
-        this->node_data = node_data;
-    }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
-};
-
 class node_add_child_cmd_t : public cmd_i {
 public:
     node_desc_t node;
@@ -158,31 +130,33 @@ public:
 
     std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
 };
-class event_update_cmd_t : public cmd_i {
-    size_t index;
-    event_t data;
-    
+
+template<typename T, typename IndexT = size_t>
+class update_by_index_cmd_t : public cmd_i {
+    IndexT index;
+    T data;
+
 public:
-    event_update_cmd_t(size_t index, const event_t& data) {
+    update_by_index_cmd_t(IndexT index, const T& data) {
         this->index = index;
         this->data = data;
     }
 
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;    
-};
+    std::unique_ptr<cmd_i> apply(data_state_t* state) const override {
+        T* item_ptr;
+        get_ptr_by_index(*state, index, &item_ptr);
 
-class bus_update_cmd_t : public cmd_i {
-    size_t index;
-    output_bus_t data;
-    
-public:
-    bus_update_cmd_t(size_t index, const output_bus_t& data) {
-        this->index = index;
-        this->data = data;
+        auto reverse_cmd = std::make_unique<update_by_index_cmd_t>(index, *item_ptr);
+        *item_ptr = data;
+
+        return reverse_cmd;
     }
-
-    std::unique_ptr<cmd_i> apply(data_state_t* state) const override;
 };
+
+using node_repeat_update_cmd_t = update_by_index_cmd_t<node_repeat_t, utils::index_id_t>;
+using node_file_update_cmd_t = update_by_index_cmd_t<file_node_t, utils::index_id_t>;
+using event_update_cmd_t = update_by_index_cmd_t<event_t>;
+using bus_update_cmd_t = update_by_index_cmd_t<output_bus_t>;
 
 }
 }

@@ -105,6 +105,28 @@ file_node_t& get_file_node_mut(data_state_t* state, utils::index_id_t id);
 const node_repeat_t& get_repeat_node(const data_state_t* state, utils::index_id_t id);
 node_repeat_t& get_repeat_node_mut(data_state_t* state, utils::index_id_t id);
 
+//
+// data indexed getters
+//
+
+static void get_ptr_by_index(data_state_t& state, size_t index, event_t** out_ptr) {
+    *out_ptr = &state.events[index];
+}
+
+static void get_ptr_by_index(data_state_t& state, size_t index, output_bus_t** out_ptr) {
+    *out_ptr = &state.output_buses[index];
+}
+
+static void get_ptr_by_index(data_state_t& state, utils::index_id_t index, node_repeat_t** out_ptr) {
+    *out_ptr = &get_repeat_node_mut(&state, index);
+}
+
+static void get_ptr_by_index(data_state_t& state, utils::index_id_t index, file_node_t** out_ptr) {
+    *out_ptr = &get_file_node_mut(&state, index);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 static const std::vector<node_desc_t>* get_child_nodes_ptr(const data_state_t* state, const node_desc_t& node) {
     auto node_index = get_index(state->node_ids, node.id);
 

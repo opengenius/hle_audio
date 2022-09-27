@@ -46,24 +46,6 @@ std::unique_ptr<cmd_i> node_destroy_cmd_t::apply(data_state_t* state) const {
     return std::make_unique<node_create_cmd_t>(node_desc);
 }
 
-std::unique_ptr<cmd_i> node_file_update_cmd_t::apply(data_state_t* state) const {
-    auto& node = get_file_node_mut(state, index);
-
-    auto rev_cmd = std::make_unique<node_file_update_cmd_t>(index, node);
-    node = node_data;
-
-    return rev_cmd;
-}
-
-std::unique_ptr<cmd_i> node_repeat_update_cmd_t::apply(data_state_t* state) const {
-    auto& node = get_repeat_node_mut(state, index);
-
-    auto rev_cmd = std::make_unique<node_repeat_update_cmd_t>(index, node);
-    node = node_data;
-    
-    return rev_cmd;
-}
-
 std::unique_ptr<cmd_i> node_add_child_cmd_t::apply(data_state_t* state) const {
     auto nodes_ptr = get_child_nodes_ptr_mut(state, node);
     assert(nodes_ptr);
@@ -108,26 +90,6 @@ std::unique_ptr<cmd_i> event_remove_cmd_t::apply(data_state_t* state) const {
     elems.erase(it);
 
     return std::make_unique<event_create_cmd_t>(index);
-}
-
-std::unique_ptr<cmd_i> event_update_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = state->events[index];
-
-    auto reverse_cmd = std::make_unique<event_update_cmd_t>(index, obj_ptr);
-    
-    obj_ptr = data;
-
-    return reverse_cmd;
-}
-
-std::unique_ptr<cmd_i> bus_update_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = state->output_buses[index];
-
-    auto reverse_cmd = std::make_unique<bus_update_cmd_t>(index, obj_ptr);
-
-    obj_ptr = data;
-
-    return reverse_cmd;
 }
 
 }
