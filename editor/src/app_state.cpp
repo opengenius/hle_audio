@@ -2,7 +2,7 @@
 #include "app_logic.h"
 #include "app_view.h"
 
-#include "hlea_runtime.h"
+#include "hlea/runtime.h"
 
 #include <filesystem>
 

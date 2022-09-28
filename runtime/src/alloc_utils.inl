@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include "alloc_types.h"
+#include "hlea/alloc_types.h"
 
 struct allocator_t {
     const hlea_allocator_ti* vt;

@@ -1,4 +1,4 @@
-#include "hlea_runtime.h"
+#include "hlea/runtime.h"
 
 #include "sound_data_types_generated.h"
 

@@ -1,5 +1,5 @@
 add_library(hlea_runtime STATIC
-    src/hlea_runtime.cpp
+    src/runtime.cpp
 )
 
 set_property(TARGET hlea_runtime PROPERTY CXX_STANDARD 17)
