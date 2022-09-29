@@ -37,6 +37,8 @@ enum class view_action_type_e {
     SOUND_STOP,
 
     RUNTIME_FIRE_EVENT,
+    RUNTIME_FIRE_GROUP_STOP,
+    RUNTIME_FIRE_GROUP_STOP_ALL,
     Count
 };
 
@@ -101,6 +103,13 @@ struct view_state_t {
 
     std::vector<int> output_bus_volumes;
     bus_edit_data_t bus_edit_state;
+
+    struct group_info_t {
+        size_t group_index;
+        bool paused;
+    };
+    std::vector<group_info_t> active_group_infos;
+    size_t runtime_target_index;
 
     // actions
     NodeType add_node_type;    

@@ -27,6 +27,8 @@ struct app_state_t {
     hlea_event_bank_t* bank = nullptr;
     size_t bank_cmd_index = 0;
 
+    std::vector<hlea_group_info_t> active_group_infos;
+
     logic_state_t bl_state;
     size_t save_cmd_index = 0;
 };
@@ -225,6 +227,9 @@ void process_frame(app_state_t* state) {
      *  update runtime
      */
     hlea_process_active_groups(state->runtime_ctx);
+    auto group_count = hlea_get_active_groups_count(state->runtime_ctx);
+    state->active_group_infos.resize(group_count);
+    hlea_get_active_groups_infos(state->runtime_ctx, state->active_group_infos.data(), group_count);
 
     /**
      * process view
@@ -233,6 +238,15 @@ void process_frame(app_state_t* state) {
 
     const auto prev_group_index = view_state.active_group_index;
     const auto prev_event_index = view_state.event_list_index;
+
+    // map active_group_infos to view_state data
+    view_state.active_group_infos.clear();
+    for (auto& info : state->active_group_infos) {
+        view_state_t::group_info_t v_info = {};
+        v_info.group_index = info.group_index;
+        v_info.paused = info.paused;
+        view_state.active_group_infos.push_back(v_info);
+    }
 
     //
     // build up view
@@ -384,6 +398,29 @@ void process_frame(app_state_t* state) {
         break;
     case view_action_type_e::RUNTIME_FIRE_EVENT: {
         fire_event(state);
+        break;
+    }
+    case view_action_type_e::RUNTIME_FIRE_GROUP_STOP: {
+        hlea_action_info_t action_info = {};
+        action_info.type = hlea_action_type_e::stop;
+        action_info.target = view_state.runtime_target_index;
+        action_info.fade_time = 0.3f;
+        hlea_fire_event_info_t ev_info = {};
+        ev_info.bank = state->bank;
+        ev_info.actions = &action_info;
+        ev_info.action_count = 1;
+        hlea_fire_event(state->runtime_ctx, &ev_info);
+        break;
+    }
+    case view_action_type_e::RUNTIME_FIRE_GROUP_STOP_ALL: {
+        hlea_action_info_t action_info = {};
+        action_info.type = hlea_action_type_e::stop_all;
+        action_info.fade_time = 0.3f;
+        hlea_fire_event_info_t ev_info = {};
+        ev_info.bank = state->bank;
+        ev_info.actions = &action_info;
+        ev_info.action_count = 1;
+        hlea_fire_event(state->runtime_ctx, &ev_info);
         break;
     }
 

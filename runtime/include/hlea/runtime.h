@@ -49,7 +49,32 @@ void hlea_unload_events_bank(hlea_context_t* impl_data, hlea_event_bank_t* bank)
  * events api
  */
 void hlea_process_active_groups(hlea_context_t* impl_data);
+
 void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id);
+
+enum hlea_action_type_e {
+    play_single,
+    play,
+    stop,
+    stop_all,
+    break_loop
+};
+
+struct hlea_action_info_t {
+    hlea_action_type_e type;
+    size_t target;
+    float fade_time;
+};
+
+struct hlea_fire_event_info_t {
+    hlea_event_bank_t* bank;
+    uint32_t obj_id;
+    hlea_action_info_t* actions;
+    size_t action_count;
+};
+void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* event_info);
+
+// volumes
 void hlea_set_main_volume(hlea_context_t* impl_data, float volume);
 void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float volume);
 
@@ -57,6 +82,14 @@ void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float vol
  * editor api
  * todo: move out of public header to its own implemenation files
  */
+
+size_t hlea_get_active_groups_count(hlea_context_t* ctx);
+struct hlea_group_info_t {
+    size_t group_index;
+    bool paused;
+};
+size_t hlea_get_active_groups_infos(hlea_context_t* ctx, hlea_group_info_t* out_infos, size_t out_infos_size);
+
 void hlea_set_sounds_path(hlea_context_t* ctx, const char* sounds_path);
 void hlea_play_file(hlea_context_t* ctx, const char* file_path);
 bool hlea_is_file_playing(hlea_context_t* ctx);

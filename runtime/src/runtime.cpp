@@ -965,6 +965,31 @@ void hlea_process_active_groups(hlea_context_t* ctx) {
     }
 }
 
+static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type, const event_desc_t* desc) {
+    switch(event_type) {
+        case hlea_action_type_e::play: {
+            group_play(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::play_single: {
+            group_play_single(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::stop: {
+            group_stop(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::stop_all: {
+            group_stop_all(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::break_loop: {
+            group_break_loop(impl_data, desc);
+            break;
+        }
+    }
+}
+
 void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id) {
     auto event = bank->static_data->events()->LookupByKey(eventName);
     if (!event) return;
@@ -972,40 +997,32 @@ void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const c
     auto actions_size = event->actions()->size();
     for (uint32_t action_index = 0u; action_index< actions_size; ++action_index) {
         auto action = event->actions()->Get(action_index);
-
-        auto group_index = action->target_group_index();
+        if (action->type() == hle_audio::ActionType::ActionType_none) continue;
 
         event_desc_t desc = {};
         desc.bank = bank;
-        desc.group_index = group_index;
+        desc.group_index = action->target_group_index();
         desc.obj_id = obj_id;
         desc.fade_time = action->fade_time();
 
-        switch(action->type()) {
-            case hle_audio::ActionType::ActionType_play: {
-                group_play(impl_data, &desc);
-                break;
-            }
-            case hle_audio::ActionType::ActionType_play_single: {
-                group_play_single(impl_data, &desc);
-                break;
-            }
-            case hle_audio::ActionType::ActionType_stop: {
-                group_stop(impl_data, &desc);
-                break;
-            }
-            case hle_audio::ActionType::ActionType_stop_all: {
-                group_stop_all(impl_data, &desc);
-                break;
-            }
-            case hle_audio::ActionType::ActionType_break_: {
-                group_break_loop(impl_data, &desc);
-                break;
-            case hle_audio::ActionType::ActionType_none:
-                // do nothing
-                break;
-            }
-        }
+        auto type = (hlea_action_type_e)(action->type() - 1);
+        fire_event(impl_data, type, &desc);
+    }
+}
+
+void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* event_info) {
+    assert(event_info);
+
+    for (uint32_t action_index = 0u; action_index< event_info->action_count; ++action_index) {
+        auto& action = event_info->actions[action_index];
+
+        event_desc_t desc = {};
+        desc.bank = event_info->bank;
+        desc.group_index = action.target;
+        desc.obj_id = event_info->obj_id;
+        desc.fade_time = action.fade_time;
+
+        fire_event(impl_data, action.type, &desc);
     }
 }
 
@@ -1020,6 +1037,25 @@ void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float vol
 /** 
  * editor api
  */
+
+
+size_t hlea_get_active_groups_count(hlea_context_t* ctx) {
+    return ctx->active_groups_size;
+}
+
+size_t hlea_get_active_groups_infos(hlea_context_t* ctx, hlea_group_info_t* out_infos, size_t out_infos_size) {
+    const size_t out_groups_count = (out_infos_size < ctx->active_groups_size) ? out_infos_size : ctx->active_groups_size;
+
+    for (size_t active_index = 0u; active_index < out_groups_count; ++active_index) {
+        group_data_t& group = ctx->active_groups[active_index];
+
+        auto& out_info = out_infos[active_index];
+        out_info.group_index = group.group_index;
+        out_info.paused = (group.state == playing_state_e::PAUSED);
+    }
+
+    return out_groups_count;
+}
 
 void hlea_set_sounds_path(hlea_context_t* ctx, const char* sounds_path) {
     s_sounds_path = sounds_path;

@@ -548,9 +548,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     // bus edit data
     bool open_bus_popup = false;
     ImGui::BeginChild("right_pane", ImVec2(wav_list_width, 0));
-    if (ImGui::CollapsingHeader("Output buses", ImGuiTreeNodeFlags_DefaultOpen)) {
-        
-        ImGui::Text("Volumes:");
+    if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Button("Stop all")) {
+            action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP_ALL;
+        }
+        // ImGui::Text("Volumes:");
         size_t index = 0;
         for (auto& bus : data_state.output_buses) {
             ImGui::PushID((void*)(uintptr_t)index);
@@ -566,6 +568,27 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             int* v_ptr = &mut_view_state.output_bus_volumes[index];
             if (ImGui::SliderInt(bus.name.c_str(), v_ptr, 0, 100)) {
                 action = view_action_type_e::BUS_VOLUME_CHANGED;
+            }
+
+            for (const auto& info : mut_view_state.active_group_infos) {
+                auto& group_data = data_state.groups[info.group_index];
+                
+                if (group_data.output_bus_index == index) {
+                    ImGui::PushID((void*)(uintptr_t)info.group_index);
+
+                    if (info.paused) {
+                        ImGui::Text("%s (paused)", group_data.name.c_str());
+                    } else {
+                        ImGui::Text(group_data.name.c_str());
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("stop") ) {
+                        mut_view_state.runtime_target_index = info.group_index;
+                        action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP;
+                    }
+
+                    ImGui::PopID();
+                }
             }
 
             ImGui::PopID();
