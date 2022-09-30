@@ -274,7 +274,7 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
         *out_str = buses->at(n).name.c_str();
         return true;
     };
-    void* data = (void*)&data_state.output_buses;
+    auto data = (void*)&data_state.output_buses;
     if (ImGui::Combo("output bus", &current_index, 
             getter, data, (int)data_state.output_buses.size())) {
     // if (current_index != action_ptr->type) {
@@ -292,6 +292,85 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
         mut_view_state.select_events_tab = true;
         action = view_action_type_e::EVENT_FILTER;
     }
+}
+
+view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_state_t& data_state) {
+    view_action_type_e action = view_action_type_e::NONE;
+
+    size_t index = 0;
+    for (auto& bus : data_state.output_buses) {
+        ImGui::PushID((void*)(uintptr_t)index);
+
+        if (ImGui::Button("..")) {
+            mut_view_state.action_bus_index = index;
+            mut_view_state.bus_edit_state.name = bus.name;
+            ImGui::OpenPopup("show_bus_popup");
+        }
+
+        if (ImGui::BeginPopup("show_bus_popup")) {
+            ImGui_std::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                action = view_action_type_e::BUS_RENAME;
+                ImGui::CloseCurrentPopup();
+            }
+            
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine();
+
+        int* v_ptr = &mut_view_state.output_bus_volumes[index];
+        if (ImGui::SliderInt(bus.name.c_str(), 
+                v_ptr, 0, 100)) {
+            action = view_action_type_e::BUS_VOLUME_CHANGED;
+        }
+
+        bool has_active_groups = false;
+        for (const auto& info : mut_view_state.active_group_infos) {
+            auto& group_data = data_state.groups[info.group_index];
+            
+            if (group_data.output_bus_index == index) {
+                ImGui::PushID((void*)(uintptr_t)info.group_index);
+
+                has_active_groups = true;
+
+                if (info.paused) {
+                    ImGui::Text("%s (paused)", group_data.name.c_str());
+                } else {
+                    ImGui::Text(group_data.name.c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("stop") ) {
+                    mut_view_state.runtime_target_index = info.group_index;
+                    action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP;
+                }
+
+                ImGui::PopID();
+            }
+        }
+        if (has_active_groups) {
+            if (ImGui::SmallButton("Stop bus")) {
+                mut_view_state.action_bus_index = index;
+                action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP_BUS;
+            }
+        }
+
+        ImGui::PopID();
+        ImGui::Separator();
+        ++index;
+    }
+
+    if (mut_view_state.active_group_infos.size()) {
+        if (ImGui::SmallButton("Stop all")) {
+            action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP_ALL;
+        }
+    }
+
+    if (ImGui::SmallButton("Add bus")) {
+        action = view_action_type_e::BUS_ADD;
+    }
+
+    return action;
 }
 
 view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state) {
@@ -459,8 +538,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 ImGui::TableHeadersRow();
 
                 size_t action_index = 0;
-                auto& event = mut_view_state.event_state;
-                for (auto& ev_action : event.actions) {
+                for (auto& ev_action : event_state.actions) {
                     ImGui::TableNextRow(0, 20 * mut_view_state.scale);
                     ImGui::PushID((void*)(uintptr_t)action_index);
 
@@ -471,7 +549,21 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     int current_index = ev_action.type;
                     ImGui::Combo("##type", &current_index, EnumNamesActionType(), ActionType_MAX + 1);
                     if (current_index != ev_action.type) {
+                        bool prev_type_group = is_action_target_group(ev_action);
+
                         ev_action.type = (ActionType)current_index;
+
+                        // reset group index if type is not group anymore
+                        if (prev_type_group && !is_action_target_group(ev_action)) {
+                            ev_action.target_index = 0;
+
+                        // assign an active group if type changed to group target
+                        } else if(!prev_type_group && is_action_target_group(ev_action)) {
+                            if (active_group_index != invalid_index) {
+                                ev_action.target_index = active_group_index;
+                            }
+                        }
+
                         action = view_action_type_e::EVENT_UPDATE;
                     }
                     
@@ -488,25 +580,49 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                         if (ImGui::MenuItem("Remove action")) {
                             action = view_action_type_e::EVENT_REMOVE_ACTION;
                         }
-                        if (ImGui::MenuItem("Assign active group")) {
-                            ev_action.target_group_index = active_group_index;
-                            action = view_action_type_e::EVENT_UPDATE;
+                        // group target actions
+                        if (is_action_target_group(ev_action)) {
+                            if (active_group_index != invalid_index && 
+                                    ImGui::MenuItem("Assign active group")) {
+                                ev_action.target_index = active_group_index;
+                                action = view_action_type_e::EVENT_UPDATE;
+                            }
+
+                            if (ImGui::MenuItem("Show group")) {
+                                mut_view_state.active_group_index = ev_action.target_index;
+                            }
                         }
-                        if (ImGui::MenuItem("Show group")) {
-                            mut_view_state.active_group_index = ev_action.target_group_index;
-                        }
+                        
                         ImGui::EndPopup();
                     }
 
                     ImGui::SameLine();
                     
-                    const char* target_label = "all groups";
-                    if (!is_action_target_all(ev_action)) {
-                        auto& group = data_state.groups[ev_action.target_group_index];
-                        target_label = group.name.c_str();
+                    // action target
+                    if (is_action_target_group(ev_action)) {
+                        auto& group = data_state.groups[ev_action.target_index];
+                        const char* target_label = group.name.c_str();
+                        ImGui::Text(target_label);
+                    } else if (is_action_type_target_bus(ev_action.type)) {
+
+                        int current_index = ev_action.target_index;
+                        auto getter = [](void* data, int n, const char** out_str) {
+                            auto buses = (decltype(&data_state.output_buses))data;
+                            *out_str = buses->at(n).name.c_str();
+                            return true;
+                        };
+                        auto data = (void*)&data_state.output_buses;
+                        if (ImGui::Combo("output bus", &current_index, 
+                                getter, data, (int)data_state.output_buses.size())) {
+                            ev_action.target_index = current_index;
+                            action = view_action_type_e::EVENT_UPDATE;
+                        }
+                    } else if (ev_action.type == hle_audio::ActionType_none) {
+                        ImGui::Text("none");
+                    } else {
+                        ImGui::Text("all groups");
                     }
-                
-                    ImGui::Text(target_label);
+                    
 
                     // fade time
                     ImGui::TableNextColumn();
@@ -546,57 +662,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     ImGui::SameLine();
 
     // bus edit data
-    bool open_bus_popup = false;
     ImGui::BeginChild("right_pane", ImVec2(wav_list_width, 0));
     if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::Button("Stop all")) {
-            action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP_ALL;
-        }
-        // ImGui::Text("Volumes:");
-        size_t index = 0;
-        for (auto& bus : data_state.output_buses) {
-            ImGui::PushID((void*)(uintptr_t)index);
-
-            if (ImGui::Button("..")) {
-                open_bus_popup = true;
-                mut_view_state.bus_edit_state.index = index;
-                snprintf(mut_view_state.bus_edit_state.name, sizeof(mut_view_state.bus_edit_state.name), 
-                    "%s", bus.name.c_str());
-                
-            }
-            ImGui::SameLine();
-            int* v_ptr = &mut_view_state.output_bus_volumes[index];
-            if (ImGui::SliderInt(bus.name.c_str(), v_ptr, 0, 100)) {
-                action = view_action_type_e::BUS_VOLUME_CHANGED;
-            }
-
-            for (const auto& info : mut_view_state.active_group_infos) {
-                auto& group_data = data_state.groups[info.group_index];
-                
-                if (group_data.output_bus_index == index) {
-                    ImGui::PushID((void*)(uintptr_t)info.group_index);
-
-                    if (info.paused) {
-                        ImGui::Text("%s (paused)", group_data.name.c_str());
-                    } else {
-                        ImGui::Text(group_data.name.c_str());
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("stop") ) {
-                        mut_view_state.runtime_target_index = info.group_index;
-                        action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP;
-                    }
-
-                    ImGui::PopID();
-                }
-            }
-
-            ImGui::PopID();
-            ++index;
-        }
-
-        if (ImGui::SmallButton("Add bus")) {
-            action = view_action_type_e::BUS_ADD;
+        auto rt_action = build_runtime_view(mut_view_state, data_state);
+        if (rt_action != view_action_type_e::NONE) {
+            action = rt_action;
         }
         ImGui::Separator();
     }
@@ -656,21 +726,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 action = view_action_type_e::NODE_ADD;
             }
         }
-        ImGui::EndPopup();
-    }
-
-    if (open_bus_popup) {
-        ImGui::OpenPopup("show_bus_popup");
-    }    
-    if (ImGui::BeginPopup("show_bus_popup")) {
-        ImGui::InputText("name", 
-                mut_view_state.bus_edit_state.name, IM_ARRAYSIZE(mut_view_state.bus_edit_state.name), 
-                ImGuiInputTextFlags_AutoSelectAll);
-        if (ImGui::IsItemDeactivatedAfterEdit()) {
-            action = view_action_type_e::BUS_RENAME;
-            ImGui::CloseCurrentPopup();
-        }
-        
         ImGui::EndPopup();
     }
 

@@ -24,7 +24,7 @@ void add_event_action(logic_state_t* state, size_t event_index, size_t target_gr
 
     hle_audio::ActionT act = {};
     if (target_group_index != invalid_index) {
-        act.target_group_index = target_group_index;
+        act.target_index = target_group_index;
     }
     
     event.actions.push_back(act);

@@ -181,7 +181,7 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
         for (auto& action_v : actions_v.GetArray()) {
             ActionT action = {};
             action.type = ActionType_from_str(action_v[KEY_TYPE].GetString());
-            action.target_group_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
+            action.target_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
             action.fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
 
             event.actions.push_back(action);
@@ -327,7 +327,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
             writer.String(EnumNameActionType(action.type));
 
             writer.String(KEY_TARGET_GROUP_INDEX);
-            writer.Uint(action.target_group_index);
+            writer.Uint(action.target_index);
             
             if (action.fade_time > 0.0f) {
                 writer.String(KEY_FADE_TIME);

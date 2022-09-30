@@ -68,15 +68,21 @@ struct data_state_t {
     std::vector<output_bus_t> output_buses;
 };
 
-static bool is_action_target_all(const ActionT& action) {
-    return action.type == ActionType_stop_all;
+static bool is_action_target_group(const ActionT& action) {
+    return action.type != ActionType_none &&
+        action.type != ActionType_stop_all &&
+        action.type != ActionType_stop_bus;
+}
+
+static bool is_action_type_target_bus(const hle_audio::ActionType& type) {
+    return type == ActionType_stop_bus;
 }
 
 static bool is_event_target_group(const event_t& event, size_t group_index) {
     for (auto& action : event.actions) {
-        if (is_action_target_all(action)) continue;
+        if (!is_action_target_group(action)) continue;
 
-        if (group_index == action.target_group_index) {
+        if (group_index == action.target_index) {
             return true;
         }
     }

@@ -39,14 +39,12 @@ enum class view_action_type_e {
     RUNTIME_FIRE_EVENT,
     RUNTIME_FIRE_GROUP_STOP,
     RUNTIME_FIRE_GROUP_STOP_ALL,
+    RUNTIME_FIRE_GROUP_STOP_BUS,
     Count
 };
 
-const size_t MAX_NAME_LENGTH = 256;
-
 struct bus_edit_data_t {
-    size_t index = 0;
-    char name[MAX_NAME_LENGTH];
+    std::string name;
 };
 
 struct node_action_data_t {
@@ -103,6 +101,7 @@ struct view_state_t {
 
     std::vector<int> output_bus_volumes;
     bus_edit_data_t bus_edit_state;
+    size_t action_bus_index;
 
     struct group_info_t {
         size_t group_index;

@@ -57,12 +57,13 @@ enum hlea_action_type_e {
     play,
     stop,
     stop_all,
-    break_loop
+    break_loop,
+    stop_bus
 };
 
 struct hlea_action_info_t {
     hlea_action_type_e type;
-    size_t target;
+    size_t target_index;
     float fade_time;
 };
 

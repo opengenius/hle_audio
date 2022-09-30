@@ -374,8 +374,8 @@ void process_frame(app_state_t* state) {
         break;
     case view_action_type_e::BUS_RENAME:
         rename_bus(bl_state, 
-            view_state.bus_edit_state.index,
-            view_state.bus_edit_state.name); 
+            view_state.action_bus_index,
+            view_state.bus_edit_state.name.c_str()); 
         break;
 
     case view_action_type_e::BUS_VOLUME_CHANGED: {
@@ -403,7 +403,7 @@ void process_frame(app_state_t* state) {
     case view_action_type_e::RUNTIME_FIRE_GROUP_STOP: {
         hlea_action_info_t action_info = {};
         action_info.type = hlea_action_type_e::stop;
-        action_info.target = view_state.runtime_target_index;
+        action_info.target_index = view_state.runtime_target_index;
         action_info.fade_time = 0.3f;
         hlea_fire_event_info_t ev_info = {};
         ev_info.bank = state->bank;
@@ -415,6 +415,18 @@ void process_frame(app_state_t* state) {
     case view_action_type_e::RUNTIME_FIRE_GROUP_STOP_ALL: {
         hlea_action_info_t action_info = {};
         action_info.type = hlea_action_type_e::stop_all;
+        action_info.fade_time = 0.3f;
+        hlea_fire_event_info_t ev_info = {};
+        ev_info.bank = state->bank;
+        ev_info.actions = &action_info;
+        ev_info.action_count = 1;
+        hlea_fire_event(state->runtime_ctx, &ev_info);
+        break;
+    }
+    case view_action_type_e::RUNTIME_FIRE_GROUP_STOP_BUS: {
+        hlea_action_info_t action_info = {};
+        action_info.type = hlea_action_type_e::stop_bus;
+        action_info.target_index = view_state.action_bus_index;
         action_info.fade_time = 0.3f;
         hlea_fire_event_info_t ev_info = {};
         ev_info.bank = state->bank;

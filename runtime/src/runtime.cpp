@@ -72,7 +72,7 @@ struct group_data_t {
 
 struct event_desc_t {
     hlea_event_bank_t* bank;
-    uint32_t group_index;
+    uint32_t target_index;
     uint32_t obj_id;
     float fade_time;
 };
@@ -669,11 +669,11 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     if (ctx->active_groups_size == MAX_ACTIVE_GROUPS) return;
 
     auto data_store = desc->bank->static_data;
-    auto group_data = data_store->groups()->Get(desc->group_index);
+    auto group_data = data_store->groups()->Get(desc->target_index);
 
     group_data_t group = {};
     group.bank = desc->bank;
-    group.group_index = desc->group_index;
+    group.group_index = desc->target_index;
     group.obj_id = desc->obj_id;
     init(&group.state_alloc, 256, ctx->allocator); // todo: control size
 
@@ -696,7 +696,7 @@ static uint32_t find_active_group_index(hlea_context_t* impl_data, const event_d
         auto& group = impl_data->active_groups[it_index];
 
         if (group.bank == desc->bank &&
-            group.group_index == desc->group_index &&
+            group.group_index == desc->target_index &&
             group.obj_id == desc->obj_id) {
             break;
         }
@@ -755,6 +755,19 @@ static void group_stop_all(hlea_context_t* impl_data, const event_desc_t* desc) 
         auto& group = impl_data->active_groups[it_index];
 
         if (group.obj_id == desc->obj_id) {
+            group_active_stop_with_fade(impl_data, group, desc->fade_time);
+        }
+    }
+}
+
+static void group_stop_bus(hlea_context_t* impl_data, const event_desc_t* desc) {
+    for (size_t it_index = 0u; it_index < impl_data->active_groups_size; ++it_index) {
+        auto& group = impl_data->active_groups[it_index];
+
+        auto data_store = group.bank->static_data;
+        auto group_data = data_store->groups()->Get(group.group_index);
+
+        if (group_data->output_bus_index() == desc->target_index) {
             group_active_stop_with_fade(impl_data, group, desc->fade_time);
         }
     }
@@ -987,6 +1000,10 @@ static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type,
             group_break_loop(impl_data, desc);
             break;
         }
+        case hlea_action_type_e::stop_bus: {
+            group_stop_bus(impl_data, desc);
+            break;
+        }
     }
 }
 
@@ -1001,7 +1018,7 @@ void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const c
 
         event_desc_t desc = {};
         desc.bank = bank;
-        desc.group_index = action->target_group_index();
+        desc.target_index = action->target_index();
         desc.obj_id = obj_id;
         desc.fade_time = action->fade_time();
 
@@ -1018,7 +1035,7 @@ void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* ev
 
         event_desc_t desc = {};
         desc.bank = event_info->bank;
-        desc.group_index = action.target;
+        desc.target_index = action.target_index;
         desc.obj_id = event_info->obj_id;
         desc.fade_time = action.fade_time;
 

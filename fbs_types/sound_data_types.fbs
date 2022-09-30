@@ -46,12 +46,13 @@ enum ActionType:byte {
     play,
     stop,
     stop_all,
-    break
+    break_loop,
+    stop_bus
 }
 
 table Action {
     type:ActionType;
-    target_group_index:ushort;
+    target_index:ushort;
     fade_time:float = 0.0;
 }
 
