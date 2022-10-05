@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
+#include <memory>
 #include "hlea/alloc_types.h"
 
 struct allocator_t {

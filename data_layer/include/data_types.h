@@ -75,7 +75,9 @@ static bool is_action_target_group(const ActionT& action) {
 }
 
 static bool is_action_type_target_bus(const hle_audio::ActionType& type) {
-    return type == ActionType_stop_bus;
+    return type == ActionType_stop_bus ||
+        type == ActionType_pause_bus ||
+        type == ActionType_resume_bus;
 }
 
 static bool is_event_target_group(const event_t& event, size_t group_index) {

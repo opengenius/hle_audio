@@ -335,10 +335,24 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
                 has_active_groups = true;
 
                 if (info.paused) {
-                    ImGui::Text("%s (paused)", group_data.name.c_str());
+                    ImGui::Text("%s (||)", group_data.name.c_str());
                 } else {
                     ImGui::Text(group_data.name.c_str());
                 }
+                
+                ImGui::SameLine();
+                if (info.paused) {
+                    if (ImGui::SmallButton("resume") ) {
+                        mut_view_state.runtime_target_index = info.group_index;
+                        action = view_action_type_e::RUNTIME_FIRE_GROUP_RESUME;
+                    }
+                } else {
+                    if (ImGui::SmallButton("pause") ) {
+                        mut_view_state.runtime_target_index = info.group_index;
+                        action = view_action_type_e::RUNTIME_FIRE_GROUP_PAUSE;
+                    }
+                }
+
                 ImGui::SameLine();
                 if (ImGui::SmallButton("stop") ) {
                     mut_view_state.runtime_target_index = info.group_index;
@@ -349,7 +363,19 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
             }
         }
         if (has_active_groups) {
-            if (ImGui::SmallButton("Stop bus")) {
+            ImGui::Text("Bus actions: ");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("pause")) {
+                mut_view_state.action_bus_index = index;
+                action = view_action_type_e::RUNTIME_FIRE_GROUP_PAUSE_BUS;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("resume")) {
+                mut_view_state.action_bus_index = index;
+                action = view_action_type_e::RUNTIME_FIRE_GROUP_RESUME_BUS;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("stop")) {
                 mut_view_state.action_bus_index = index;
                 action = view_action_type_e::RUNTIME_FIRE_GROUP_STOP_BUS;
             }
@@ -703,7 +729,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                         ImGui::SameLine();
                         if (ImGui::SmallButton("Stop")) {
                             action = view_action_type_e::SOUND_STOP;
-                        }   
+                        }
                     }
                 }
             }

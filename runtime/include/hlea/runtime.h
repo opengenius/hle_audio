@@ -52,13 +52,17 @@ void hlea_process_active_groups(hlea_context_t* impl_data);
 
 void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id);
 
-enum hlea_action_type_e {
+enum class hlea_action_type_e {
     play_single,
     play,
     stop,
-    stop_all,
     break_loop,
-    stop_bus
+    pause,
+    resume,
+    pause_bus,
+    resume_bus,
+    stop_bus,
+    stop_all
 };
 
 struct hlea_action_info_t {

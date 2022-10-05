@@ -45,9 +45,13 @@ enum ActionType:byte {
     play_single,
     play,
     stop,
-    stop_all,
     break_loop,
-    stop_bus
+    pause,
+    resume,
+    pause_bus,
+    resume_bus,
+    stop_bus,
+    stop_all
 }
 
 table Action {

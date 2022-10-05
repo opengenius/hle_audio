@@ -1,10 +1,8 @@
 #include "hlea/runtime.h"
 
 #include "sound_data_types_generated.h"
-
-#define MINIAUDIO_IMPLEMENTATION
+#include <cassert>
 #include "miniaudio.h"
-
 #include "alloc_utils.inl"
 
 static const uint16_t MAX_SOUNDS = 1024;
@@ -133,12 +131,12 @@ static void* allocator_bridge_realloc(void* p, size_t sz, void* pUserData) {
     return reallocate(*alloc, p, sz);
 }
 
-static void  allocator_bridge_free(void* p, void* pUserData) {
+static void allocator_bridge_free(void* p, void* pUserData) {
     auto alloc = (allocator_t*)pUserData;
     deallocate(*alloc, p);
 }
 
-static ma_allocation_callbacks g_allocator_bridge_ma_cb_prototype = {
+static const ma_allocation_callbacks g_allocator_bridge_ma_cb_prototype = {
     nullptr,
     allocator_bridge_malloc,
     allocator_bridge_realloc,
@@ -353,7 +351,51 @@ static bool find_wav_loop_point(const file_buffer_data_t& buffer_data, uint64_t*
     return false;
 }
 
-// extern "C" ma_uint64 ma_calculate_frame_count_after_resampling(ma_uint32 sampleRateOut, ma_uint32 sampleRateIn, ma_uint64 frameCountIn);
+extern "C" ma_uint64 ma_calculate_frame_count_after_resampling(ma_uint32 sampleRateOut, ma_uint32 sampleRateIn, ma_uint64 frameCountIn);
+
+static ma_result read_file(ma_vfs* pVFS, const char* pFilePath, 
+        const allocator_t& alloc,
+        file_buffer_data_t* out_read_buffer) {
+    ma_result result;
+    ma_vfs_file file;
+    ma_file_info info;
+
+    result = ma_vfs_open(pVFS, pFilePath, MA_OPEN_MODE_READ, &file);
+    if (result != MA_SUCCESS) {
+        return result;
+    }
+
+    result = ma_vfs_info(pVFS, file, &info);
+    if (result != MA_SUCCESS) {
+        ma_vfs_close(pVFS, file);
+        return result;
+    }
+
+    if (info.sizeInBytes > MA_SIZE_MAX) {
+        ma_vfs_close(pVFS, file);
+        return MA_TOO_BIG;
+    }
+
+    file_buffer_data_t res = {};
+    res.data = allocate(alloc, info.sizeInBytes);
+    if (res.data == NULL) {
+        ma_vfs_close(pVFS, file);
+        return result;
+    }
+
+    result = ma_vfs_read(pVFS, file, res.data, (size_t)info.sizeInBytes, &res.size);  /* Safe cast. */
+    ma_vfs_close(pVFS, file);
+
+    if (result != MA_SUCCESS) {
+        deallocate(alloc, res.data);
+        return result;
+    }
+
+    assert(out_read_buffer != NULL);
+    *out_read_buffer = res;
+
+    return MA_SUCCESS;
+}
 
 static sound_id_t make_sound(hlea_context_t* ctx, 
         hlea_event_bank_t* bank, uint8_t output_bus_index,
@@ -392,7 +434,6 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     auto& buffer_data = bank->file_buffers[file_node->file_index()];
     if (!buffer_data.data) {
         ma_vfs* vfs = ctx->engine.pResourceManager->config.pVFS;
-        auto& alloc = ctx->engine.pResourceManager->config.allocationCallbacks;
 
         const char* path = bank->static_data->sound_files()->Get(file_node->file_index())->c_str();
 
@@ -403,9 +444,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         }
 
         file_buffer_data_t read_buffer;
-        ma_result result = ma_vfs_open_and_read_file(vfs, path, 
-                                &read_buffer.data, &read_buffer.size, 
-                                &alloc);
+        ma_result result = read_file(vfs, path, 
+                                ctx->allocator, &read_buffer);
         if (result == MA_SUCCESS) {
             buffer_data = read_buffer;
         }
@@ -690,10 +730,10 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     ctx->active_groups[ctx->active_groups_size++] = group;
 }
 
-static uint32_t find_active_group_index(hlea_context_t* impl_data, const event_desc_t* desc) {
+static uint32_t find_active_group_index(hlea_context_t* ctx, const event_desc_t* desc) {
     uint32_t index = 0u;
-    for (size_t it_index = 0u; it_index < impl_data->active_groups_size; ++it_index) {
-        auto& group = impl_data->active_groups[it_index];
+    for (size_t it_index = 0u; it_index < ctx->active_groups_size; ++it_index) {
+        auto& group = ctx->active_groups[it_index];
 
         if (group.bank == desc->bank &&
             group.group_index == desc->target_index &&
@@ -705,12 +745,12 @@ static uint32_t find_active_group_index(hlea_context_t* impl_data, const event_d
     return index;
 }
 
-static void group_play_single(hlea_context_t* impl_data, const event_desc_t* desc) {
-    auto active_index = find_active_group_index(impl_data, desc);
+static void group_play_single(hlea_context_t* ctx, const event_desc_t* desc) {
+    auto active_index = find_active_group_index(ctx, desc);
 
-    if (active_index < impl_data->active_groups_size) return;
+    if (active_index < ctx->active_groups_size) return;
 
-    group_play(impl_data, desc);
+    group_play(ctx, desc);
 }
 
 static void sound_fade_and_stop(hlea_context_t* ctx, sound_id_t sound_id, ma_uint64 fade_time_pcm) {
@@ -733,6 +773,7 @@ static void sound_fade_and_stop(hlea_context_t* ctx, sound_id_t sound_id, ma_uin
 }
 
 static void group_active_stop_with_fade(hlea_context_t* ctx, group_data_t& group, float fade_time) {
+    if (group.state == playing_state_e::STOPPED) return;
     group.state = playing_state_e::STOPPED;
 
     auto engine_srate = ma_engine_get_sample_rate(&ctx->engine);
@@ -750,6 +791,60 @@ static void group_stop(hlea_context_t* impl_data, const event_desc_t* desc) {
     group_active_stop_with_fade(impl_data, impl_data->active_groups[active_index], desc->fade_time);
 }
 
+
+static void group_active_pause_with_fade(hlea_context_t* ctx, group_data_t& group, float fade_time) {
+    if (group.state != playing_state_e::PLAYING) return;
+    group.state = playing_state_e::PAUSED;
+
+    auto engine_srate = ma_engine_get_sample_rate(&ctx->engine);
+    auto fade_time_pcm = (ma_uint64)(fade_time * engine_srate);
+
+    sound_fade_and_stop(ctx, group.sound_id, fade_time_pcm);
+    sound_fade_and_stop(ctx, group.next_sound_id, fade_time_pcm);
+}
+
+static void group_pause(hlea_context_t* ctx, const event_desc_t* desc) {
+    auto active_index = find_active_group_index(ctx, desc);
+
+    if (active_index == ctx->active_groups_size) return;
+
+    group_active_pause_with_fade(ctx, ctx->active_groups[active_index], desc->fade_time);
+}
+
+static void sound_start_with_fade(hlea_context_t* ctx, sound_id_t sound_id, ma_uint64 fade_time_pcm) {
+    if (!sound_id) return;
+
+    auto sound_data = get_sound_data(ctx, sound_id);
+
+    // disable stop timer
+    ma_sound_set_stop_time_in_pcm_frames(&sound_data->engine_sound, (ma_uint64)-1);
+
+    // setup fade
+    ma_sound_set_fade_in_pcm_frames(&sound_data->engine_sound, -1, 1, fade_time_pcm);
+
+    // and start
+    ma_sound_start(&sound_data->engine_sound);
+}
+
+static void group_active_resume_with_fade(hlea_context_t* ctx, group_data_t& group, float fade_time) {
+    if (group.state != playing_state_e::PAUSED) return;
+    group.state = playing_state_e::PLAYING;
+
+    auto engine_srate = ma_engine_get_sample_rate(&ctx->engine);
+    auto fade_time_pcm = (ma_uint64)(fade_time * engine_srate);
+
+    sound_start_with_fade(ctx, group.sound_id, fade_time_pcm);
+    start_next_after_current(ctx, group);
+}
+
+static void group_resume(hlea_context_t* ctx, const event_desc_t* desc) {
+    auto active_index = find_active_group_index(ctx, desc);
+
+    if (active_index == ctx->active_groups_size) return;
+
+    group_active_resume_with_fade(ctx, ctx->active_groups[active_index], desc->fade_time);
+}
+
 static void group_stop_all(hlea_context_t* impl_data, const event_desc_t* desc) {
     for (size_t it_index = 0u; it_index < impl_data->active_groups_size; ++it_index) {
         auto& group = impl_data->active_groups[it_index];
@@ -760,17 +855,31 @@ static void group_stop_all(hlea_context_t* impl_data, const event_desc_t* desc) 
     }
 }
 
-static void group_stop_bus(hlea_context_t* impl_data, const event_desc_t* desc) {
-    for (size_t it_index = 0u; it_index < impl_data->active_groups_size; ++it_index) {
-        auto& group = impl_data->active_groups[it_index];
+typedef void (*group_with_fade_func)(hlea_context_t* ctx, group_data_t& group, float fade_time);
+
+static void apply_to_groups_with_bus(hlea_context_t* ctx, const event_desc_t* desc, group_with_fade_func action_func) {
+    for (size_t it_index = 0u; it_index < ctx->active_groups_size; ++it_index) {
+        auto& group = ctx->active_groups[it_index];
 
         auto data_store = group.bank->static_data;
         auto group_data = data_store->groups()->Get(group.group_index);
 
         if (group_data->output_bus_index() == desc->target_index) {
-            group_active_stop_with_fade(impl_data, group, desc->fade_time);
+            action_func(ctx, group, desc->fade_time);
         }
     }
+}
+
+static void group_stop_bus(hlea_context_t* ctx, const event_desc_t* desc) {
+    apply_to_groups_with_bus(ctx, desc, group_active_stop_with_fade);
+}
+
+static void group_pause_bus(hlea_context_t* ctx, const event_desc_t* desc) {
+    apply_to_groups_with_bus(ctx, desc, group_active_pause_with_fade);
+}
+
+static void group_resume_bus(hlea_context_t* ctx, const event_desc_t* desc) {
+    apply_to_groups_with_bus(ctx, desc, group_active_resume_with_fade);
 }
 
 static void group_break_loop(hlea_context_t* impl_data, const event_desc_t* desc) {
@@ -859,17 +968,15 @@ void hlea_wakeup(hlea_context_t* ctx) {
 }
 
 /**
- * init with ma_malloc allocated buffer
+ * init with allocated buffer
  */
 static hlea_event_bank_t* load_events_bank_buffer(hlea_context_t* impl_data, void* pData) {
-    auto& alloc = impl_data->engine.pResourceManager->config.allocationCallbacks;
-    
     auto static_data = hle_audio::GetDataStore(pData);
 
     auto files_size = static_data->sound_files()->size();
 
     size_t bank_byte_size = offsetof(struct hlea_event_bank_t, file_buffers[files_size]);
-    auto bank = (hlea_event_bank_t*)ma_malloc(bank_byte_size, &alloc);
+    auto bank = (hlea_event_bank_t*)allocate(impl_data->allocator, bank_byte_size, alignof(hlea_event_bank_t));
 
     bank->data_buffer_ptr = pData;
     bank->static_data = static_data;
@@ -878,29 +985,23 @@ static hlea_event_bank_t* load_events_bank_buffer(hlea_context_t* impl_data, voi
     return bank;
 }
 
-hlea_event_bank_t* hlea_load_events_bank(hlea_context_t* impl_data, const char* bank_filename) {
-    ma_vfs* vfs = impl_data->engine.pResourceManager->config.pVFS;
-    auto& alloc = impl_data->engine.pResourceManager->config.allocationCallbacks;
+hlea_event_bank_t* hlea_load_events_bank(hlea_context_t* ctx, const char* bank_filename) {
+    ma_vfs* vfs = ctx->engine.pResourceManager->config.pVFS;
 
-    size_t dataSizeInBytes;
-    void* pData;
-    ma_result result = ma_vfs_open_and_read_file(vfs, bank_filename, &pData, &dataSizeInBytes, &alloc);
+    file_buffer_data_t buffer = {};
+    ma_result result = read_file(vfs, bank_filename, ctx->allocator, &buffer);
 
-    return load_events_bank_buffer(impl_data, pData);
+    return load_events_bank_buffer(ctx, buffer.data);
 }
 
-hlea_event_bank_t* hlea_load_events_bank_from_buffer(hlea_context_t* impl_data, const uint8_t* buf, size_t buf_size) {
-    auto& alloc = impl_data->engine.pResourceManager->config.allocationCallbacks;
-
-    auto internal_buf = ma_malloc(buf_size, &alloc);
+hlea_event_bank_t* hlea_load_events_bank_from_buffer(hlea_context_t* ctx, const uint8_t* buf, size_t buf_size) {
+    auto internal_buf = allocate(ctx->allocator, buf_size);
     memcpy(internal_buf, buf, buf_size);
 
-    return load_events_bank_buffer(impl_data, internal_buf);
+    return load_events_bank_buffer(ctx, internal_buf);
 }
 
 void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank) {
-    auto& alloc = ctx->engine.pResourceManager->config.allocationCallbacks;
-
     // stop all sounds from bank
     for (uint32_t active_index = 0u; active_index < ctx->active_groups_size; ++active_index) {
         group_data_t& group = ctx->active_groups[active_index];
@@ -915,11 +1016,11 @@ void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank) {
     // release file buffers
     auto files_size = bank->static_data->sound_files()->size();
     for (uint32_t i = 0u; i < files_size; ++i) {
-        ma_free(bank->file_buffers[i].data, &alloc);
+        deallocate(ctx->allocator, bank->file_buffers[i].data);
     }
 
-    ma_free(bank->data_buffer_ptr, &alloc);
-    ma_free(bank, &alloc);
+    deallocate(ctx->allocator, bank->data_buffer_ptr);
+    deallocate(ctx->allocator, bank);
 }
 
 void hlea_process_active_groups(hlea_context_t* ctx) {
@@ -992,6 +1093,14 @@ static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type,
             group_stop(impl_data, desc);
             break;
         }
+        case hlea_action_type_e::pause: {
+            group_pause(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::resume: {
+            group_resume(impl_data, desc);
+            break;
+        }
         case hlea_action_type_e::stop_all: {
             group_stop_all(impl_data, desc);
             break;
@@ -1002,6 +1111,14 @@ static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type,
         }
         case hlea_action_type_e::stop_bus: {
             group_stop_bus(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::pause_bus: {
+            group_pause_bus(impl_data, desc);
+            break;
+        }
+        case hlea_action_type_e::resume_bus: {
+            group_resume_bus(impl_data, desc);
             break;
         }
     }
