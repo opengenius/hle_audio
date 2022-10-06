@@ -1,5 +1,6 @@
 add_library(hlea_runtime STATIC
     src/runtime.cpp
+    src/node_state_stack.cpp
     src/ma_impl.c
     src/file_api_vfs_bridge.cpp
 )

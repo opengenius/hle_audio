@@ -5,6 +5,7 @@
 #include "miniaudio.h"
 #include "alloc_utils.inl"
 #include "file_api_vfs_bridge.h"
+#include "node_state_stack.h"
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -30,13 +31,6 @@ struct hlea_event_bank_t {
     void* data_buffer_ptr;
     const hle_audio::DataStore* static_data;
     file_buffer_data_t file_buffers[1]; // todo: merge file buffers with static_data into single bank file
-};
-
-struct state_stack_entry_t {
-    state_stack_entry_t* prev;
-
-    const hle_audio::NodeDesc *node_desc;
-    void* state_data;
 };
 
 struct sequence_rt_state_t {
@@ -65,8 +59,7 @@ struct group_data_t {
 
     bool apply_sound_fade_out;
 
-    chunked_stack_allocator_t state_alloc;
-    state_stack_entry_t* state_stack;
+    node_state_stack_t state_stack;
 };
 
 struct event_desc_t {
@@ -406,11 +399,6 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     return sound_id;
 }
 
-struct memory_layout_t {
-    size_t size;
-    size_t alignment;
-};
-
 template<typename T>
 inline memory_layout_t static_type_layout() {
     return {sizeof(T), alignof(T)};
@@ -478,38 +466,22 @@ static const hle_audio::NodeDesc* next_node(const hle_audio::DataStore* store, c
     return nullptr;
 }
 
-static void pop_up_state(group_data_t& group) {
-    if (!group.state_stack) return;
-
-    auto prev_top = group.state_stack->prev;
-    deallocate(&group.state_alloc, group.state_stack);
-    group.state_stack = prev_top;
-}
-
-static bool init_and_push_state(group_data_t& group, const hle_audio::NodeDesc* node_desc) {
+static bool init_and_push_state(node_state_stack_t& stack, const hle_audio::NodeDesc* node_desc) {
     memory_layout_t layout =  {};
     if (get_state_info(node_desc, &layout)) {
-        // todo: use pooled allocator instead of general g_alloc_cb
-        auto new_stack_entry = allocate<state_stack_entry_t>(&group.state_alloc);
-        new_stack_entry->node_desc = node_desc;
-
-        void* node_state = allocate(&group.state_alloc, layout.size, layout.alignment);
-        init_state(node_desc, node_state);
-        new_stack_entry->state_data = node_state;
-
-        new_stack_entry->prev = group.state_stack;
-        group.state_stack = new_stack_entry;
+        push_state(stack, node_desc, layout);
+        init_state(node_desc, stack.top_entry->state_data);
 
         return true;
     }
     return false;
 }
 
-static const hle_audio::NodeDesc* next_node_statefull(group_data_t& group, const hle_audio::DataStore* store) {
+static const hle_audio::NodeDesc* next_node_statefull(node_state_stack_t& stack, const hle_audio::DataStore* store) {
     const hle_audio::NodeDesc* next_node_desc = nullptr;
-    while (!next_node_desc && group.state_stack) {
-        next_node_desc = next_node(store, group.state_stack->node_desc, group.state_stack->state_data);
-        if (!next_node_desc) pop_up_state(group);
+    while (!next_node_desc && stack.top_entry) {
+        next_node_desc = next_node(store, stack.top_entry->node_desc, stack.top_entry->state_data);
+        if (!next_node_desc) pop_up_state(stack);
     }
 
     return next_node_desc;
@@ -521,14 +493,14 @@ static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
 
     const hle_audio::NodeDesc* next_node_desc = nullptr;
     // first run
-    if (!group.state_stack) {
+    if (!group.state_stack.top_entry) {
         next_node_desc = group_sdata->node();
     }
 
     while(true) {
         if (!next_node_desc) {
             // process state node
-            next_node_desc = next_node_statefull(group, data_store);
+            next_node_desc = next_node_statefull(group.state_stack, data_store);
         }
 
         // no nodes to process, finish
@@ -540,7 +512,7 @@ static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
             return make_sound(ctx, group.bank, group_sdata->output_bus_index(), file_node);
         }
 
-        if (init_and_push_state(group, next_node_desc)) {
+        if (init_and_push_state(group.state_stack, next_node_desc)) {
             // use stacked node
             next_node_desc = nullptr;
         } else {
@@ -583,7 +555,7 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     group.next_sound_id = invalid_sound_id;
 
     // no state left, leave
-    if (!group.state_stack) return;
+    if (!group.state_stack.top_entry) return;
 
     group.next_sound_id = make_next_sound(ctx, group);
     if (group.next_sound_id) {
@@ -607,7 +579,9 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     group.bank = desc->bank;
     group.group_index = desc->target_index;
     group.obj_id = desc->obj_id;
-    init(&group.state_alloc, 256, ctx->allocator); // todo: control size
+    // todo: use pooled allocator instead of general one
+    // todo: control size
+    init(group.state_stack, 256, ctx->allocator);
 
     group.sound_id = make_next_sound(ctx, group);
     if (group.sound_id) {
@@ -799,7 +773,7 @@ static void group_active_release(hlea_context_t* ctx, uint32_t active_index) {
     group_data_t& group = ctx->active_groups[active_index];
 
     // clean up state data
-    deinit(&group.state_alloc);
+    deinit(group.state_stack);
 
     // swap remove
     ctx->active_groups[active_index] = ctx->active_groups[ctx->active_groups_size - 1];
