@@ -529,11 +529,14 @@ static void start_next_after_current(hlea_context_t* ctx, group_data_t& group) {
     if (!group.next_sound_id) return;
 
     auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
-    if (!ma_sound_is_looping(&sound_data_ptr->engine_sound)) {
+    auto sound = &sound_data_ptr->engine_sound;
+    if (!ma_sound_is_looping(sound)) {
 
         ma_uint64 cursor, length;
-        ma_sound_get_cursor_in_pcm_frames(&sound_data_ptr->engine_sound, &cursor);
-        ma_sound_get_length_in_pcm_frames(&sound_data_ptr->engine_sound, &length);
+        ma_sound_get_cursor_in_pcm_frames(sound, &cursor);
+        ma_sound_get_length_in_pcm_frames(sound, &length);
+
+        auto sound_finished = ma_sound_at_end(sound);
 
         auto data_store = group.bank->static_data;
         auto group_data = data_store->groups()->Get(group.group_index);
@@ -541,13 +544,19 @@ static void start_next_after_current(hlea_context_t* ctx, group_data_t& group) {
         auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time() * engine_srate);
 
         auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
+        auto next_sound = &next_sound_data_ptr->engine_sound;
         if (fade_time_pcm) {
-            ma_sound_set_fade_in_pcm_frames(&next_sound_data_ptr->engine_sound, 0, 1, fade_time_pcm);
+            ma_sound_set_fade_in_pcm_frames(next_sound, -1, 1, fade_time_pcm);
         }
-        ma_sound_set_start_time_in_pcm_frames(&next_sound_data_ptr->engine_sound, ma_engine_get_time(&ctx->engine) - cursor + length - fade_time_pcm);
-        ma_sound_start(&next_sound_data_ptr->engine_sound);
+        if (!sound_finished && (cursor + fade_time_pcm < length)) {
+            ma_sound_set_start_time_in_pcm_frames(next_sound, ma_engine_get_time(&ctx->engine) - cursor + length - fade_time_pcm);
+        }
+        ma_sound_set_stop_time_in_pcm_frames(next_sound, (ma_uint64)-1);
+        ma_sound_start(next_sound);
 
-        group.apply_sound_fade_out = true;
+        if (!sound_finished) {
+            group.apply_sound_fade_out = true;
+        }
     }
 }
 
@@ -586,9 +595,10 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     group.sound_id = make_next_sound(ctx, group);
     if (group.sound_id) {
         auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
-        
-        ma_sound_set_volume(&sound_data_ptr->engine_sound, group_data->volume());
-        ma_sound_start(&sound_data_ptr->engine_sound);
+        auto sound = &sound_data_ptr->engine_sound;
+
+        ma_sound_set_volume(sound, group_data->volume());
+        ma_sound_start(sound);
 
         group_make_next_sound(ctx, group);
     }
@@ -627,6 +637,7 @@ static void sound_fade_and_stop(hlea_context_t* ctx, sound_id_t sound_id, ma_uin
     // just stop if not playing (could have delayed start, so need to stop explicitly)
     if (!ma_sound_is_playing(&sound_data->engine_sound)) {
         ma_sound_stop(&sound_data->engine_sound);
+        return;
     }
 
     // schedule fade
@@ -681,15 +692,19 @@ static void sound_start_with_fade(hlea_context_t* ctx, sound_id_t sound_id, ma_u
     if (!sound_id) return;
 
     auto sound_data = get_sound_data(ctx, sound_id);
+    auto sound = &sound_data->engine_sound;
+
+    // finished, nothing to resume
+    if (ma_sound_at_end(sound)) return;
 
     // disable stop timer
-    ma_sound_set_stop_time_in_pcm_frames(&sound_data->engine_sound, (ma_uint64)-1);
+    ma_sound_set_stop_time_in_pcm_frames(sound, (ma_uint64)-1);
 
     // setup fade
-    ma_sound_set_fade_in_pcm_frames(&sound_data->engine_sound, -1, 1, fade_time_pcm);
+    ma_sound_set_fade_in_pcm_frames(sound, -1, 1, fade_time_pcm);
 
     // and start
-    ma_sound_start(&sound_data->engine_sound);
+    ma_sound_start(sound);
 }
 
 static void group_active_resume_with_fade(hlea_context_t* ctx, group_data_t& group, float fade_time) {
