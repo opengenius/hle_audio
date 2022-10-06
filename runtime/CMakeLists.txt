@@ -1,6 +1,7 @@
 add_library(hlea_runtime STATIC
     src/runtime.cpp
     src/ma_impl.c
+    src/file_api_vfs_bridge.cpp
 )
 
 set_property(TARGET hlea_runtime PROPERTY CXX_STANDARD 17)
