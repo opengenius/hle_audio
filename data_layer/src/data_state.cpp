@@ -1,4 +1,5 @@
 #include "data_types.h"
+#include <cassert>
 
 namespace hle_audio {
 namespace editor {
@@ -26,7 +27,7 @@ void create_group(data_state_t* state, size_t group_index) {
         auto& events = state->events;
         for (auto& event_ptr : events) {
             for (auto& action : event_ptr.actions) {
-                if (!is_action_target_group(action)) continue;
+                if (!is_action_target_group(action.type)) continue;
 
                 if (group_index <= action.target_index) {
                     ++action.target_index;
@@ -46,7 +47,7 @@ void remove_group(data_state_t* state, size_t group_index) {
     auto& events = state->events;
     for (auto& event_ptr : events) {
         for (auto& action : event_ptr.actions) {
-            if (!is_action_target_group(action)) continue;
+            if (!is_action_target_group(action.type)) continue;
 
             assert(group_index != action.target_index);
             if (group_index < action.target_index) {
@@ -60,22 +61,22 @@ void create_node(data_state_t* state, const node_desc_t& desc) {
     size_t node_index = 0;
     switch (desc.type)
     {
-    case NodeType_None: {
+    case rt::node_type_e::None: {
         break;
     }
-    case NodeType_File: {
+    case rt::node_type_e::File: {
         node_index = state->nodes_file.add({});
         break;
     }
-    case NodeType_Random: {
+    case rt::node_type_e::Random: {
         node_index = state->nodes_random.add({});
         break;
     }
-    case NodeType_Sequence: {
+    case rt::node_type_e::Sequence: {
         node_index = state->nodes_sequence.add({});
         break;
     }
-    case NodeType_Repeat: {
+    case rt::node_type_e::Repeat: {
         node_index = state->nodes_repeat.add({});
         break;
     }
@@ -93,22 +94,22 @@ void destroy_node(data_state_t* state, const node_desc_t& desc) {
 
     switch (desc.type)
     {
-    case NodeType_None: {
+    case rt::node_type_e::None: {
         break;
     }
-    case NodeType_File: {
+    case rt::node_type_e::File: {
         state->nodes_file.remove(node_index);
         break;
     }
-    case NodeType_Random: {
+    case rt::node_type_e::Random: {
         state->nodes_random.remove(node_index);
         break;
     }
-    case NodeType_Sequence: {
+    case rt::node_type_e::Sequence: {
         state->nodes_sequence.remove(node_index);
         break;
     }
-    case NodeType_Repeat: {
+    case rt::node_type_e::Repeat: {
         state->nodes_repeat.remove(node_index);
         break;
     }

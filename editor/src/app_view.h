@@ -115,7 +115,7 @@ struct view_state_t {
     size_t runtime_target_index;
 
     // actions
-    NodeType add_node_type;    
+    rt::node_type_e add_node_type;    
     node_action_data_t node_action;
     size_t action_group_index;
 };

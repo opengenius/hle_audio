@@ -21,12 +21,12 @@ void create_group(logic_state_t* state, size_t group_index);
 void remove_group(logic_state_t* state, size_t group_index);
 void apply_group_update(logic_state_t* state, size_t group_index, const named_group_t& data);
 
-void create_root_node(logic_state_t* state, size_t group_index, NodeType type);
+void create_root_node(logic_state_t* state, size_t group_index, rt::node_type_e type);
 void remove_root_node(logic_state_t* state, size_t group_index);
-void create_node(logic_state_t* state, const node_desc_t& node_desc, NodeType type);
+void create_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type);
 void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size_t node_index);
 
-void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, NodeType type);
+void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type);
 
 void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::string& filename);
 void switch_file_node_loop(logic_state_t* state, const node_desc_t& node_desc);

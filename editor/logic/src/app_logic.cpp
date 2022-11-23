@@ -1,5 +1,6 @@
 #include "app_logic.h"
 #include "commands.h"
+#include <cassert>
 
 namespace hle_audio {
 namespace editor {
@@ -22,7 +23,7 @@ void apply_group_update(logic_state_t* state,
 void add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index) {
     auto event = state->data_state.events[event_index];
 
-    hle_audio::ActionT act = {};
+    rt::action_t act = {};
     if (target_group_index != invalid_index) {
         act.target_index = target_group_index;
     }
@@ -71,10 +72,10 @@ static void perform_remove_node_rec(logic_state_t* state, const node_desc_t& nod
     }
 
     // reset params
-    if (node_desc.type == NodeType_File) {
+    if (node_desc.type == rt::node_type_e::File) {
         execute_cmd(state, 
             std::make_unique<node_file_update_cmd_t>(node_desc.id, file_node_t{}));
-    } else if (node_desc.type == NodeType_Repeat) {
+    } else if (node_desc.type == rt::node_type_e::Repeat) {
         auto node = get_repeat_node(&state->data_state, node_desc.id);
 
         auto cmd = std::make_unique<node_repeat_update_cmd_t>(
@@ -96,7 +97,7 @@ static void perform_remove_group_root_node_chained(logic_state_t* state, size_t 
     auto& data_state = state->data_state;
 
     auto& group_ptr = get_group(&data_state, group_index);
-    if (group_ptr.node.type != NodeType_None) {
+    if (group_ptr.node.type != rt::node_type_e::None) {
         auto node_desc = group_ptr.node;
         execute_cmd(state, 
             std::make_unique<group_update_node_cmd_t>(group_index, invalid_node_desc));
@@ -141,7 +142,7 @@ void remove_group(logic_state_t* state, size_t group_index) {
         std::make_unique<group_remove_cmd_t>(group_index));
 }
 
-static node_desc_t execute_cmd_create_node(logic_state_t* state, NodeType type) {
+static node_desc_t execute_cmd_create_node(logic_state_t* state, rt::node_type_e type) {
     node_desc_t desc = {
         type,
         reserve_node_id(state->data_state.node_ids)
@@ -153,13 +154,13 @@ static node_desc_t execute_cmd_create_node(logic_state_t* state, NodeType type) 
     return desc;
 }
 
-void create_root_node(logic_state_t* state, size_t group_index, NodeType type) {
+void create_root_node(logic_state_t* state, size_t group_index, rt::node_type_e type) {
     auto desc = execute_cmd_create_node(state, type);
     auto cmd = std::make_unique<group_update_node_cmd_t>(group_index, desc);
     execute_cmd(state, std::move(cmd));
 }
 
-void create_node(logic_state_t* state, const node_desc_t& node_desc, NodeType type) {
+void create_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type) {
     auto nodes_ptr = get_child_nodes_ptr(&state->data_state, node_desc);
     assert(nodes_ptr);
 
@@ -172,7 +173,7 @@ void create_node(logic_state_t* state, const node_desc_t& node_desc, NodeType ty
     execute_cmd(state, std::move(cmd));
 }
 
-void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, NodeType type) {
+void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type) {
     auto node = get_repeat_node(&state->data_state, node_desc.id);
     node.node = execute_cmd_create_node(state, type);
 
@@ -191,7 +192,7 @@ void remove_root_node(logic_state_t* state, size_t group_index) {
 }
 
 void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size_t node_index) {
-    if (parent_node_desc.type == NodeType_Repeat) {
+    if (parent_node_desc.type == rt::node_type_e::Repeat) {
         auto node = get_repeat_node(&state->data_state, parent_node_desc.id);
 
         auto child_desc = node.node;

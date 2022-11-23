@@ -33,7 +33,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
 
     switch (node_desc.type)
     {
-    case NodeType_None: {
+    case rt::node_type_e::None: {
         ImGui::Text("None");
         ImGui::SameLine();
         if (ImGui::SmallButton("Add...")) {
@@ -42,7 +42,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
         }
         break;
     }
-    case NodeType_File: {
+    case rt::node_type_e::File: {
         auto& file_node = get_file_node(&state, node_desc.id);
 
         {
@@ -74,9 +74,9 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
         
         break;
     }
-    case NodeType_Random:
-    case NodeType_Sequence:
-        if (TreeNodeWithRemoveButton(node_index, EnumNameNodeType(node_desc.type), &removePressed)) {
+    case rt::node_type_e::Random:
+    case rt::node_type_e::Sequence:
+        if (TreeNodeWithRemoveButton(node_index, node_type_name(node_desc.type), &removePressed)) {
             auto node_ptr = get_child_nodes_ptr(&state, node_desc);
             uint32_t child_index = 0;
             for (auto& child_desc : *node_ptr) {
@@ -88,8 +88,8 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
             ImGui::TreePop();
         }
         break;
-    case NodeType_Repeat:
-        if (TreeNodeWithRemoveButton(node_index, EnumNameNodeType(node_desc.type), &removePressed)) {
+    case rt::node_type_e::Repeat:
+        if (TreeNodeWithRemoveButton(node_index, node_type_name(node_desc.type), &removePressed)) {
             auto& repeat_node = get_repeat_node(&state, node_desc.id);
 
             static node_desc_t changing_node = {};
@@ -110,7 +110,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
                 out_action.action_data.repeat_count = changing_value;
             }
 
-            if (repeat_node.node.type != NodeType_None) {
+            if (repeat_node.node.type != rt::node_type_e::None) {
                 build_node_tree(state, view_state, node_desc, 0, repeat_node.node, out_action);
             } else if (ImGui::SmallButton("Add...")) {
                 add_node = true;
@@ -572,19 +572,19 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth(-FLT_MIN);
 
-                    int current_index = ev_action.type;
-                    ImGui::Combo("##type", &current_index, EnumNamesActionType(), ActionType_MAX + 1);
-                    if (current_index != ev_action.type) {
-                        bool prev_type_group = is_action_target_group(ev_action);
+                    auto current_index = (int)ev_action.type;
+                    ImGui::Combo("##type", &current_index, rt::c_action_type_names, sizeof(rt::c_action_type_names) / sizeof(*rt::c_action_type_names));
+                    if (current_index != (int)ev_action.type) {
+                        bool prev_type_group = is_action_target_group(ev_action.type);
 
-                        ev_action.type = (ActionType)current_index;
+                        ev_action.type = (rt::action_type_e)current_index;
 
                         // reset group index if type is not group anymore
-                        if (prev_type_group && !is_action_target_group(ev_action)) {
+                        if (prev_type_group && !is_action_target_group(ev_action.type)) {
                             ev_action.target_index = 0;
 
                         // assign an active group if type changed to group target
-                        } else if(!prev_type_group && is_action_target_group(ev_action)) {
+                        } else if(!prev_type_group && is_action_target_group(ev_action.type)) {
                             if (active_group_index != invalid_index) {
                                 ev_action.target_index = active_group_index;
                             }
@@ -607,7 +607,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                             action = view_action_type_e::EVENT_REMOVE_ACTION;
                         }
                         // group target actions
-                        if (is_action_target_group(ev_action)) {
+                        if (is_action_target_group(ev_action.type)) {
                             if (active_group_index != invalid_index && 
                                     ImGui::MenuItem("Assign active group")) {
                                 ev_action.target_index = active_group_index;
@@ -625,7 +625,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     ImGui::SameLine();
                     
                     // action target
-                    if (is_action_target_group(ev_action)) {
+                    if (is_action_target_group(ev_action.type)) {
                         auto& group = data_state.groups[ev_action.target_index];
                         const char* target_label = group.name.c_str();
                         ImGui::Text(target_label);
@@ -643,7 +643,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                             ev_action.target_index = current_index;
                             action = view_action_type_e::EVENT_UPDATE;
                         }
-                    } else if (ev_action.type == hle_audio::ActionType_none) {
+                    } else if (ev_action.type == rt::action_type_e::none) {
                         ImGui::Text("none");
                     } else {
                         ImGui::Text("all groups");
@@ -744,11 +744,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         mut_view_state.add_node_target = node_action.node_desc;
         ImGui::OpenPopup("create_node_popup");
     }
-    mut_view_state.add_node_type = NodeType_None;
+    mut_view_state.add_node_type = rt::node_type_e::None;
     if (ImGui::BeginPopup("create_node_popup")) {
-        for (int i = 1; i <= NodeType_MAX; i++) {
-            if (ImGui::Selectable(EnumNamesNodeType()[i])) {
-                mut_view_state.add_node_type = EnumValuesNodeType()[i];
+        for (int i = 1; i <= std::size(rt::c_node_type_names); i++) {
+            if (ImGui::Selectable(rt::c_node_type_names[i])) {
+                mut_view_state.add_node_type = (rt::node_type_e)i;
                 action = view_action_type_e::NODE_ADD;
             }
         }

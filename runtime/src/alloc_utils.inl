@@ -35,11 +35,3 @@ static inline std::unique_ptr<T, allocator_deleter_t> allocate_unique(const allo
     return std::unique_ptr<T, allocator_deleter_t>(allocate<T>(alloc), {alloc});
 }
 
-template<typename T>
-static inline T align_forward(T p, uint32_t align)
-{
-    assert((align & (align - 1)) == 0);
-
-    uintptr_t pi = (uintptr_t(p) + (align - 1)) & ~(uintptr_t(align) - 1);
-    return (T)pi;
-}

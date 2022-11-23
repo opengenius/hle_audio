@@ -1,4 +1,5 @@
 #include "commands.h"
+#include <cassert>
 
 namespace hle_audio {
 namespace editor {

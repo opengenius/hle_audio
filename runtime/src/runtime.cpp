@@ -1,11 +1,15 @@
 #include "hlea/runtime.h"
 
-#include "sound_data_types_generated.h"
 #include <cassert>
 #include "miniaudio.h"
 #include "alloc_utils.inl"
 #include "file_api_vfs_bridge.h"
 #include "node_state_stack.h"
+#include "default_allocator.h"
+#include "rt_types.h"
+
+using namespace hle_audio::rt;
+using hle_audio::node_state_stack_t;
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -28,8 +32,8 @@ struct file_buffer_data_t {
 };
 
 struct hlea_event_bank_t {
-    void* data_buffer_ptr;
-    const hle_audio::DataStore* static_data;
+    buffer_t data_buffer_ptr;
+    const hle_audio::rt::store_t* static_data;
     file_buffer_data_t file_buffers[1]; // todo: merge file buffers with static_data into single bank file
 };
 
@@ -86,27 +90,6 @@ struct hlea_context_t {
 
     group_data_t active_groups[MAX_ACTIVE_GROUPS];
     uint16_t active_groups_size;
-};
-
-static void* default_malloc_allocate(void* udata, size_t size, size_t alignment) {
-    assert(alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
-    return malloc(size);
-    // todo: no aligned_alloc on windows
-    // return std::aligned_alloc(alignment, size);
-}
-
-static void* default_malloc_reallocate(void* udata, void* p, size_t size) {
-    return realloc(p, size);
-}
-
-static void default_malloc_deallocate(void* udata, void* p) {
-    free(p);
-}
-
-static hlea_allocator_ti g_malloc_allocator_vt  = {
-    default_malloc_allocate,
-    default_malloc_reallocate,
-    default_malloc_deallocate
 };
 
 static void* allocator_bridge_malloc(size_t sz, void* pUserData) {
@@ -284,13 +267,15 @@ static ma_result read_file(ma_vfs* pVFS, const char* pFilePath,
 
 static sound_id_t make_sound(hlea_context_t* ctx, 
         hlea_event_bank_t* bank, uint8_t output_bus_index,
-        const hle_audio::FileNode* file_node) {
+        const hle_audio::rt::file_node_t* file_node) {
     const sound_id_t invalid_id = (sound_id_t)0u;
 
     const ma_uint32 sound_flags = MA_SOUND_FLAG_NO_PITCH | MA_SOUND_FLAG_NO_SPATIALIZATION;
 
-    if (file_node->stream()) {
-        const char* path = bank->static_data->sound_files()->Get(file_node->file_index())->c_str();
+    auto buf_ptr = bank->data_buffer_ptr;
+
+    if (file_node->stream) {
+        const char* path = bank->static_data->sound_files.get(buf_ptr, file_node->file_index).get_ptr(buf_ptr);
         
         sound_data_t* sound;
         auto sound_id = acquire_sound(ctx, &sound);
@@ -311,17 +296,18 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                 nullptr,
                 &sound->engine_sound);
 
-        ma_sound_set_looping(&sound->engine_sound, file_node->loop());
+        ma_sound_set_looping(&sound->engine_sound, file_node->loop);
 
         return sound_id;
     }
 
-    auto& buffer_data = bank->file_buffers[file_node->file_index()];
+    auto& buffer_data = bank->file_buffers[file_node->file_index];
     if (!buffer_data.data) {
         ma_vfs* vfs = ctx->engine.pResourceManager->config.pVFS;
 
-        const char* path = bank->static_data->sound_files()->Get(file_node->file_index())->c_str();
+        const char* path = bank->static_data->sound_files.get(buf_ptr, file_node->file_index).get_ptr(buf_ptr);
 
+        // todo: unsafe
         char path_buf[512];
         if (s_sounds_path) {
             snprintf(path_buf, sizeof(path_buf), "%s/%s", s_sounds_path, path);
@@ -374,7 +360,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         return invalid_id;  // Failed to init sound.
     }
 
-    ma_sound_set_looping(&sound->engine_sound, file_node->loop());
+    ma_sound_set_looping(&sound->engine_sound, file_node->loop);
 
     // Extract wav loop point
     uint64_t loop_start, loop_end;
@@ -404,50 +390,61 @@ inline memory_layout_t static_type_layout() {
     return {sizeof(T), alignof(T)};
 }
 
-static bool get_state_info(const hle_audio::NodeDesc* node_desc, memory_layout_t* out_layout) {
-    if (node_desc->type() == hle_audio::NodeType_Sequence) {
+static bool get_state_info(const node_desc_t* node_desc, memory_layout_t* out_layout) {
+    if (node_desc->type == node_type_e::Sequence) {
         *out_layout = static_type_layout<sequence_rt_state_t>();
         return true;
-    } else if (node_desc->type() == hle_audio::NodeType_Repeat) {
+    } else if (node_desc->type == node_type_e::Repeat) {
         *out_layout = static_type_layout<repeat_rt_state_t>();
         return true;
     }
     return false;
 }
 
-static void init_state(const hle_audio::NodeDesc* node_desc, void* state) {
-    if (node_desc->type() == hle_audio::NodeType_Sequence) {
+static void init_state(const node_desc_t* node_desc, void* state) {
+    if (node_desc->type == node_type_e::Sequence) {
         auto s = (sequence_rt_state_t*)state;
         *s = {};
-    } else if (node_desc->type() == hle_audio::NodeType_Repeat) {
+    } else if (node_desc->type == node_type_e::Repeat) {
         auto s = (repeat_rt_state_t*)state;
         *s = {};
     }
 }
 
-static const hle_audio::NodeDesc* next_node(const hle_audio::DataStore* store, const hle_audio::NodeDesc* node_desc, void* state) {
-    if (node_desc->type() == hle_audio::NodeType_Sequence) {
+template<typename T>
+static const T* bank_get(const hlea_event_bank_t* bank, 
+        const array_view_t<T> arr, size_t index) {
+    auto data_ptr = bank->data_buffer_ptr;
+    return &arr.get(data_ptr, index);
+}
+
+static const named_group_t* bank_get_group(const hlea_event_bank_t* bank, uint32_t group_index) {
+    return bank_get(bank, bank->static_data->groups, group_index);
+}
+
+static const node_desc_t* next_node(const hlea_event_bank_t* bank, const node_desc_t* node_desc, void* state) {
+    if (node_desc->type == node_type_e::Sequence) {
         auto s = (sequence_rt_state_t*)state;
         
-        const hle_audio::SequenceNode* seq_node = store->nodes_sequence()->Get(node_desc->index());
+        auto seq_node = bank_get(bank, bank->static_data->nodes_sequence, node_desc->index);
 
-        auto seq_size = seq_node->nodes()->size();
+        auto seq_size = seq_node->nodes.count;
         if (seq_size <= s->current_index) return nullptr;
 
-        auto res = seq_node->nodes()->Get(s->current_index);
+        auto res = &seq_node->nodes.get(bank->data_buffer_ptr, s->current_index);
 
         // update state
         ++s->current_index;
 
         return res;
-    } else if (node_desc->type() == hle_audio::NodeType_Repeat) {
+    } else if (node_desc->type == node_type_e::Repeat) {
         auto s = (repeat_rt_state_t*)state;
         
-        const hle_audio::RepeatNode* repeat_node = store->nodes_repeat()->Get(node_desc->index());
+        auto repeat_node = bank_get(bank, bank->static_data->nodes_repeat, node_desc->index);
 
-        if (repeat_node->repeat_count() && repeat_node->repeat_count() <= s->iteration_counter) return nullptr;
+        if (repeat_node->repeat_count && repeat_node->repeat_count <= s->iteration_counter) return nullptr;
 
-        auto res = repeat_node->node();
+        auto res = &repeat_node->node;
 
         // update state
         ++s->iteration_counter;
@@ -457,16 +454,16 @@ static const hle_audio::NodeDesc* next_node(const hle_audio::DataStore* store, c
     //
     // stateless nodes
     //
-    } else if (node_desc->type() == hle_audio::NodeType_Random) {
-        const hle_audio::RandomNode* random_node = store->nodes_random()->Get(node_desc->index());
-        int random_index = rand() % random_node->nodes()->size();
-        return random_node->nodes()->Get(random_index);
+    } else if (node_desc->type == node_type_e::Random) {
+        auto random_node = bank_get(bank, bank->static_data->nodes_random, node_desc->index);
+        int random_index = rand() % random_node->nodes.count;
+        return &random_node->nodes.get(bank->data_buffer_ptr, random_index);
     }
 
     return nullptr;
 }
 
-static bool init_and_push_state(node_state_stack_t& stack, const hle_audio::NodeDesc* node_desc) {
+static bool init_and_push_state(node_state_stack_t& stack, const node_desc_t* node_desc) {
     memory_layout_t layout =  {};
     if (get_state_info(node_desc, &layout)) {
         push_state(stack, node_desc, layout);
@@ -477,10 +474,10 @@ static bool init_and_push_state(node_state_stack_t& stack, const hle_audio::Node
     return false;
 }
 
-static const hle_audio::NodeDesc* next_node_statefull(node_state_stack_t& stack, const hle_audio::DataStore* store) {
-    const hle_audio::NodeDesc* next_node_desc = nullptr;
+static const node_desc_t* next_node_statefull(node_state_stack_t& stack, const hlea_event_bank_t* bank) {
+    const node_desc_t* next_node_desc = nullptr;
     while (!next_node_desc && stack.top_entry) {
-        next_node_desc = next_node(store, stack.top_entry->node_desc, stack.top_entry->state_data);
+        next_node_desc = next_node(bank, stack.top_entry->node_desc, stack.top_entry->state_data);
         if (!next_node_desc) pop_up_state(stack);
     }
 
@@ -488,28 +485,27 @@ static const hle_audio::NodeDesc* next_node_statefull(node_state_stack_t& stack,
 }
 
 static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
-    auto data_store = group.bank->static_data;
-    auto group_sdata = data_store->groups()->Get(group.group_index);
+    auto group_sdata = bank_get_group(group.bank, group.group_index);
 
-    const hle_audio::NodeDesc* next_node_desc = nullptr;
+    const node_desc_t* next_node_desc = nullptr;
     // first run
     if (!group.state_stack.top_entry) {
-        next_node_desc = group_sdata->node();
+        next_node_desc = &group_sdata->node;
     }
 
     while(true) {
         if (!next_node_desc) {
             // process state node
-            next_node_desc = next_node_statefull(group.state_stack, data_store);
+            next_node_desc = next_node_statefull(group.state_stack, group.bank);
         }
 
         // no nodes to process, finish
         if (!next_node_desc) break;
 
         // sound node found, interupt traversing, generate sound
-        if (next_node_desc->type() == hle_audio::NodeType_File) {
-            const hle_audio::FileNode* file_node = data_store->nodes_file()->Get(next_node_desc->index());
-            return make_sound(ctx, group.bank, group_sdata->output_bus_index(), file_node);
+        if (next_node_desc->type == node_type_e::File) {
+            auto file_node = bank_get(group.bank, group.bank->static_data->nodes_file, next_node_desc->index);
+            return make_sound(ctx, group.bank, group_sdata->output_bus_index, file_node);
         }
 
         if (init_and_push_state(group.state_stack, next_node_desc)) {
@@ -517,7 +513,7 @@ static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
             next_node_desc = nullptr;
         } else {
             // stateless
-            next_node_desc = next_node(data_store, next_node_desc, nullptr);
+            next_node_desc = next_node(group.bank, next_node_desc, nullptr);
         }
     }
 
@@ -538,10 +534,10 @@ static void start_next_after_current(hlea_context_t* ctx, group_data_t& group) {
 
         auto sound_finished = ma_sound_at_end(sound);
 
-        auto data_store = group.bank->static_data;
-        auto group_data = data_store->groups()->Get(group.group_index);
+        auto group_data = bank_get_group(group.bank, group.group_index);
+
         auto engine_srate = ma_engine_get_sample_rate(&ctx->engine);
-        auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time() * engine_srate);
+        auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time * engine_srate);
 
         auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
         auto next_sound = &next_sound_data_ptr->engine_sound;
@@ -568,11 +564,10 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
 
     group.next_sound_id = make_next_sound(ctx, group);
     if (group.next_sound_id) {
-        auto data_store = group.bank->static_data;
-        auto group_data = data_store->groups()->Get(group.group_index);
+        auto group_data = bank_get_group(group.bank, group.group_index);
 
         auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
-        ma_sound_set_volume(&next_sound_data_ptr->engine_sound, group_data->volume());
+        ma_sound_set_volume(&next_sound_data_ptr->engine_sound, group_data->volume);
 
         start_next_after_current(ctx, group);
     }
@@ -580,9 +575,6 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
 
 static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     if (ctx->active_groups_size == MAX_ACTIVE_GROUPS) return;
-
-    auto data_store = desc->bank->static_data;
-    auto group_data = data_store->groups()->Get(desc->target_index);
 
     group_data_t group = {};
     group.bank = desc->bank;
@@ -597,7 +589,9 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
         auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
         auto sound = &sound_data_ptr->engine_sound;
 
-        ma_sound_set_volume(sound, group_data->volume());
+        auto group_data = bank_get_group(desc->bank, desc->target_index);
+
+        ma_sound_set_volume(sound, group_data->volume);
         ma_sound_start(sound);
 
         group_make_next_sound(ctx, group);
@@ -742,10 +736,9 @@ static void apply_to_groups_with_bus(hlea_context_t* ctx, const event_desc_t* de
     for (size_t it_index = 0u; it_index < ctx->active_groups_size; ++it_index) {
         auto& group = ctx->active_groups[it_index];
 
-        auto data_store = group.bank->static_data;
-        auto group_data = data_store->groups()->Get(group.group_index);
+        auto group_data = bank_get_group(group.bank, group.group_index);
 
-        if (group_data->output_bus_index() == desc->target_index) {
+        if (group_data->output_bus_index == desc->target_index) {
             action_func(ctx, group, desc->fade_time);
         }
     }
@@ -798,7 +791,7 @@ static void group_active_release(hlea_context_t* ctx, uint32_t active_index) {
 
 hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
 
-    allocator_t alloc = {&g_malloc_allocator_vt, nullptr};
+    allocator_t alloc = hle_audio::make_default_allocator();
     if (info->allocator_vt) {
         alloc = allocator_t{info->allocator_vt, info->allocator_udata};
     }
@@ -851,16 +844,25 @@ void hlea_wakeup(hlea_context_t* ctx) {
 /**
  * init with allocated buffer
  */
-static hlea_event_bank_t* load_events_bank_buffer(hlea_context_t* impl_data, void* pData) {
-    auto static_data = hle_audio::GetDataStore(pData);
+static hlea_event_bank_t* load_events_bank_buffer(hlea_context_t* ctx, void* pData) {
+    auto data_header = (root_header_t*)pData;
+    if (data_header->version != STORE_BLOB_VERSION) {
+        deallocate(ctx->allocator, pData);
+        return nullptr;
+    }
 
-    auto files_size = static_data->sound_files()->size();
+    buffer_t buf = {};
+    buf.ptr = pData;
+
+    auto store = data_header->store.get_ptr(buf);
+
+    auto files_size = store->sound_files.count;
 
     size_t bank_byte_size = offsetof(struct hlea_event_bank_t, file_buffers[files_size]);
-    auto bank = (hlea_event_bank_t*)allocate(impl_data->allocator, bank_byte_size, alignof(hlea_event_bank_t));
+    auto bank = (hlea_event_bank_t*)allocate(ctx->allocator, bank_byte_size, alignof(hlea_event_bank_t));
 
-    bank->data_buffer_ptr = pData;
-    bank->static_data = static_data;
+    bank->data_buffer_ptr = buf;
+    bank->static_data = store;
     memset(bank->file_buffers, 0, sizeof(file_buffer_data_t) * files_size);
 
     return bank;
@@ -895,12 +897,12 @@ void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank) {
     }
 
     // release file buffers
-    auto files_size = bank->static_data->sound_files()->size();
+    auto files_size = bank->static_data->sound_files.count;
     for (uint32_t i = 0u; i < files_size; ++i) {
         deallocate(ctx->allocator, bank->file_buffers[i].data);
     }
 
-    deallocate(ctx->allocator, bank->data_buffer_ptr);
+    deallocate(ctx->allocator, bank->data_buffer_ptr.ptr);
     deallocate(ctx->allocator, bank);
 }
 
@@ -909,7 +911,7 @@ void hlea_process_active_groups(hlea_context_t* ctx) {
         group_data_t& group = ctx->active_groups[active_index];
 
         // skip paused groups
-        // (todo: move to paused/inactive queue?)
+        // (todo(optimization): move to paused/inactive queue?)
         if (group.state == playing_state_e::PAUSED) continue;
 
         if (group.sound_id) {
@@ -921,10 +923,9 @@ void hlea_process_active_groups(hlea_context_t* ctx) {
                 ma_sound_get_cursor_in_pcm_frames(&sound_data_ptr->engine_sound, &cursor);
                 ma_sound_get_length_in_pcm_frames(&sound_data_ptr->engine_sound, &length);
 
-                auto data_store = group.bank->static_data;
-                auto group_data = data_store->groups()->Get(group.group_index);
+                auto group_data = bank_get_group(group.bank, group.group_index);
                 auto engine_srate = ma_engine_get_sample_rate(&ctx->engine);
-                auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time() * engine_srate);
+                auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time * engine_srate);
 
                 if (length <= cursor + fade_time_pcm) {
                     group.apply_sound_fade_out = false;
@@ -1006,21 +1007,32 @@ static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type,
 }
 
 void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id) {
-    auto event = bank->static_data->events()->LookupByKey(eventName);
-    if (!event) return;
+    // find event with binary search
+    // todo: replace with hash index
+    auto buf_ptr = bank->data_buffer_ptr;
+    auto event_offset_begin = bank->static_data->events.elements.get_ptr(buf_ptr);
+    auto event_offset_end = event_offset_begin + bank->static_data->events.count;
+    auto event = std::lower_bound(event_offset_begin, event_offset_end,
+            eventName, [buf_ptr](const event_t& event, const char* str)
+            {
+                auto event_name = event.name.get_ptr(buf_ptr);
+                return strcmp(event_name, str) < 0;
+            });
+    if (event == event_offset_end) return;
 
-    auto actions_size = event->actions()->size();
-    for (uint32_t action_index = 0u; action_index< actions_size; ++action_index) {
-        auto action = event->actions()->Get(action_index);
-        if (action->type() == hle_audio::ActionType::ActionType_none) continue;
+    auto actions_size = event->actions.count;
+    auto actions = event->actions.elements.get_ptr(buf_ptr);
+    for (uint32_t action_index = 0u; action_index < actions_size; ++action_index) {
+        auto action = &actions[action_index];
+        if (action->type == action_type_e::none) continue;
 
         event_desc_t desc = {};
         desc.bank = bank;
-        desc.target_index = action->target_index();
+        desc.target_index = action->target_index;
         desc.obj_id = obj_id;
-        desc.fade_time = action->fade_time();
+        desc.fade_time = action->fade_time;
 
-        auto type = (hlea_action_type_e)(action->type() - 1);
+        auto type = (hlea_action_type_e)((int)(action->type) - 1);
         fire_event(impl_data, type, &desc);
     }
 }

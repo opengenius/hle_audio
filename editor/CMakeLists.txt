@@ -13,6 +13,7 @@ FetchContent_Declare(
     glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
     GIT_TAG        b0796109629931b6fa6e449c15a177845256a407 # 3.3
+    GIT_SHALLOW    ON
 )
 FetchContent_MakeAvailable(glfw)
 

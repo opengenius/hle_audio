@@ -25,26 +25,26 @@ const auto KEY_TIMES = "times";
 const auto KEY_CROSS_FADE_TIME = "cross_fade_time";
 const auto KEY_OUTPUT_BUS_INDEX = "output_bus_index";
 
-static NodeType NodeType_from_str(const char* str) {
-    for (std::underlying_type<NodeType>::type type_i = NodeType_MIN; type_i <= NodeType_MAX; ++type_i) {
-        auto type = (NodeType)type_i;
-
-        if (strcmp(EnumNameNodeType(type), str) == 0) {
-            return type;
+static rt::node_type_e node_type_from_str(const char* str) {
+    int i = 0;
+    for (auto name : rt::c_node_type_names) {
+        if (strcmp(name, str) == 0) {
+            return (rt::node_type_e)i;
         }
+        ++i;
     }
-    return NodeType_None;
+    return rt::node_type_e::None;
 }
 
-static ActionType ActionType_from_str(const char* str) {
-    for (std::underlying_type<ActionType>::type type_i = ActionType_MIN; type_i <= ActionType_MAX; ++type_i) {
-        auto type = (ActionType)type_i;
-
-        if (strcmp(EnumNameActionType(type), str) == 0) {
-            return type;
+static rt::action_type_e ActionType_from_str(const char* str) {
+    int i = 0;
+    for (auto name : rt::c_action_type_names) {
+        if (strcmp(name, str) == 0) {
+            return (rt::action_type_e)i;
         }
+        ++i;
     }
-    return ActionType_none;
+    return rt::action_type_e::none;
 }
 
 static bool value_get_opt_bool(const Value& v, const char* key, bool def_value = false) {
@@ -73,7 +73,7 @@ static unsigned value_get_opt_uint(const Value& v, const char* key, unsigned def
 
 static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
     assert(v.IsObject());
-    auto node_type = NodeType_from_str(v[KEY_TYPE].GetString());
+    auto node_type = node_type_from_str(v[KEY_TYPE].GetString());
     node_desc_t res = {
         node_type,
         reserve_node_id(state->node_ids)
@@ -81,10 +81,10 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
     create_node(state, res);
     switch (node_type)
     {
-    case NodeType_None: {
+    case rt::node_type_e::None: {
         break;
     }
-    case NodeType_File: {
+    case rt::node_type_e::File: {
         auto& node = get_file_node_mut(state, res.id);
         node.filename = v["file"].GetString();
         node.loop = value_get_opt_bool(v, KEY_LOOP);
@@ -92,8 +92,8 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
 
         break;
     }  
-    case NodeType_Random:
-    case NodeType_Sequence: {
+    case rt::node_type_e::Random:
+    case rt::node_type_e::Sequence: {
         const auto& nodes_val = v["nodes"];
         assert(nodes_val.IsArray());
         for (auto& node_v : nodes_val.GetArray()) {
@@ -103,7 +103,7 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
         
         break;
     }
-    case NodeType_Repeat: {
+    case rt::node_type_e::Repeat: {
         auto& node = get_repeat_node_mut(state, res.id);
         node.repeat_count = value_get_opt_uint(v, KEY_TIMES);
         node.node = load_node_rec(state, v["node"]);
@@ -179,7 +179,7 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
         const auto& actions_v = event_v[KEY_ACTIONS];
         assert(actions_v.IsArray());
         for (auto& action_v : actions_v.GetArray()) {
-            ActionT action = {};
+            rt::action_t action = {};
             action.type = ActionType_from_str(action_v[KEY_TYPE].GetString());
             action.target_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
             action.fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
@@ -199,10 +199,10 @@ static void write_node_rec(Writer& writer,
     writer.StartObject();
 
     writer.String(KEY_TYPE);
-    writer.String(EnumNameNodeType(desc.type));
+    writer.String(node_type_name(desc.type));
     switch (desc.type)
     {
-    case NodeType_File: {
+    case rt::node_type_e::File: {
         auto& file_node = get_file_node(state, desc.id);
         writer.String("file");
         writer.String(file_node.filename);
@@ -217,7 +217,7 @@ static void write_node_rec(Writer& writer,
         }
         break;
     }
-    case NodeType_Repeat: {
+    case rt::node_type_e::Repeat: {
         auto& node = get_repeat_node(state, desc.id);
         writer.String("node");
         write_node_rec(writer, state, node.node);
@@ -324,7 +324,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
             writer.StartObject();
 
             writer.String(KEY_TYPE);
-            writer.String(EnumNameActionType(action.type));
+            writer.String(action_type_name(action.type));
 
             writer.String(KEY_TARGET_GROUP_INDEX);
             writer.Uint(action.target_index);

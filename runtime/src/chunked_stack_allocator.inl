@@ -1,6 +1,9 @@
 #pragma once
 
 #include "alloc_utils.inl"
+#include "internal/memory_utils.inl"
+
+namespace hle_audio {
 
 static void init(chunked_stack_allocator_t* inst, uint32_t chunk_size, const allocator_t& backing_alloc) {
     *inst = {};
@@ -70,4 +73,6 @@ static void deallocate(chunked_stack_allocator_t* inst,
         inst->top_chunk = chunk->prev;
         deallocate(inst->backing_alloc, chunk);
     }
+}
+
 }

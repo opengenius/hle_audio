@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Couldn't load data from json!\n");
         return 1;
     }
-    auto fb_buf = save_store_fb_buffer(&state);
+    auto fb_buf = save_store_blob_buffer(&state);
 
     auto out_f = fopen(out_filename, "wb");
     if (out_f) {

@@ -1,14 +1,15 @@
 #pragma once
 
-#include "sound_data_types_generated.h"
 #include "sparse_vector.h"
 #include "index_id.h"
+#include <string>
+#include "rt_types.h"
 
 namespace hle_audio {
 namespace editor {
 
 struct node_desc_t {
-    NodeType type;
+    rt::node_type_e type;
     utils::index_id_t id;
 };
 
@@ -41,7 +42,7 @@ struct named_group_t {
 
 struct event_t {
     std::string name{};
-    std::vector<hle_audio::ActionT> actions;
+    std::vector<rt::action_t> actions;
 };
 
 struct output_bus_t {
@@ -50,7 +51,7 @@ struct output_bus_t {
 
 const size_t invalid_index = ~0;
 const auto invalid_file_index = (uint16_t)~0u;
-const auto invalid_node_desc = node_desc_t{NodeType_None, utils::invalid_node_id};
+const auto invalid_node_desc = node_desc_t{rt::node_type_e::None, utils::invalid_node_id};
 
 struct data_state_t {
 
@@ -68,21 +69,21 @@ struct data_state_t {
     std::vector<output_bus_t> output_buses;
 };
 
-static bool is_action_target_group(const ActionT& action) {
-    return action.type != ActionType_none &&
-        action.type != ActionType_stop_all &&
-        action.type != ActionType_stop_bus;
+static bool is_action_target_group(const rt::action_type_e& action_type) {
+    return action_type != rt::action_type_e::none &&
+        action_type != rt::action_type_e::stop_all &&
+        action_type != rt::action_type_e::stop_bus;
 }
 
-static bool is_action_type_target_bus(const hle_audio::ActionType& type) {
-    return type == ActionType_stop_bus ||
-        type == ActionType_pause_bus ||
-        type == ActionType_resume_bus;
+static bool is_action_type_target_bus(const rt::action_type_e& type) {
+    return type == rt::action_type_e::stop_bus ||
+        type == rt::action_type_e::pause_bus ||
+        type == rt::action_type_e::resume_bus;
 }
 
 static bool is_event_target_group(const event_t& event, size_t group_index) {
     for (auto& action : event.actions) {
-        if (!is_action_target_group(action)) continue;
+        if (!is_action_target_group(action.type)) continue;
 
         if (group_index == action.target_index) {
             return true;
@@ -140,9 +141,9 @@ static const std::vector<node_desc_t>* get_child_nodes_ptr(const data_state_t* s
 
     switch (node.type)
     {       
-    case NodeType_Random:
+    case rt::node_type_e::Random:
         return &state->nodes_random[node_index].nodes;
-    case NodeType_Sequence:
+    case rt::node_type_e::Sequence:
         return &state->nodes_sequence[node_index].nodes;
     }
     return nullptr;
@@ -152,7 +153,7 @@ static std::vector<node_desc_t>* get_child_nodes_ptr_mut(data_state_t* state, co
     return const_cast<std::vector<node_desc_t>*>(get_child_nodes_ptr(state, node));
 }
 
-std::vector<uint8_t> save_store_fb_buffer(const data_state_t* state);
+std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state);
 
 /**
  * @brief Init data state from Json file

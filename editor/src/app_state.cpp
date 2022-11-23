@@ -5,6 +5,7 @@
 #include "hlea/runtime.h"
 
 #include <filesystem>
+#include <cassert>
 
 namespace fs = std::filesystem;
 
@@ -213,7 +214,7 @@ static void fire_event(app_state_t* state) {
         state->bank = nullptr;
     }
     if (!state->bank) {
-        auto fb_buffer = save_store_fb_buffer(&state->bl_state.data_state);
+        auto fb_buffer = save_store_blob_buffer(&state->bl_state.data_state);
         state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, fb_buffer.data(), fb_buffer.size());
         state->bank_cmd_index = get_undo_size(&state->bl_state.cmds);
     }
@@ -340,12 +341,12 @@ void process_frame(app_state_t* state) {
         break;
 
     case view_action_type_e::NODE_ADD: {
-        if (view_state.add_node_type) {
-            if (view_state.add_node_target.type == NodeType_None) {
+        if (view_state.add_node_type != rt::node_type_e::None) {
+            if (view_state.add_node_target.type == rt::node_type_e::None) {
                 create_root_node(bl_state, 
                     view_state.active_group_index,
                     view_state.add_node_type);
-            } else if (view_state.add_node_target.type == NodeType_Repeat) {
+            } else if (view_state.add_node_target.type == rt::node_type_e::Repeat) {
                 create_repeat_node(bl_state, view_state.add_node_target, view_state.add_node_type);
             } else {
                 // this is add child node
@@ -358,7 +359,7 @@ void process_frame(app_state_t* state) {
         auto& node_action = view_state.node_action;
         switch (node_action.node_desc.type)
         {
-        case NodeType_Repeat:
+        case rt::node_type_e::Repeat:
             update_repeat_node_times(bl_state, node_action.node_desc, node_action.action_data.repeat_count);
             break;
         
@@ -497,7 +498,7 @@ void process_frame(app_state_t* state) {
 
     auto& node_action = view_state.node_action;
     if (node_action.action_remove) {
-        if (node_action.parent_node_desc.type == NodeType_None) {
+        if (node_action.parent_node_desc.type == rt::node_type_e::None) {
             // root node case, detach from group
             remove_root_node(bl_state, 
                 view_state.active_group_index);
@@ -507,19 +508,19 @@ void process_frame(app_state_t* state) {
         }
     }
     if (node_action.action_assign_sound) {
-        if (node_action.node_desc.type == NodeType_File) {
+        if (node_action.node_desc.type == rt::node_type_e::File) {
             auto file_list_index = state->view_state.selected_sound_file_index;
             const auto& filename = state->sound_files_u8_names[file_list_index];
             assign_file_node_file(bl_state, node_action.node_desc, filename);
         }
     }
     if (node_action.action_switch_loop) {
-        if (node_action.node_desc.type == NodeType_File) {
+        if (node_action.node_desc.type == rt::node_type_e::File) {
             switch_file_node_loop(bl_state, node_action.node_desc);
         }
     }
     if (node_action.action_switch_stream) {
-        if (node_action.node_desc.type == NodeType_File) {
+        if (node_action.node_desc.type == rt::node_type_e::File) {
             switch_file_node_stream(bl_state, node_action.node_desc);
         }
     }

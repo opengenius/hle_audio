@@ -1,6 +1,8 @@
 #include "node_state_stack.h"
 #include "chunked_stack_allocator.inl"
 
+namespace hle_audio {
+
 void init(node_state_stack_t& stack, uint32_t chunk_size, const allocator_t& backing_alloc) {
     init(&stack.alloc, chunk_size, backing_alloc);
 }
@@ -18,7 +20,7 @@ void pop_up_state(node_state_stack_t& stack) {
 }
 
 void push_state(node_state_stack_t& stack, 
-            const hle_audio::NodeDesc* node_desc, const memory_layout_t& layout) {
+            const hle_audio::rt::node_desc_t* node_desc, const memory_layout_t& layout) {
     auto new_stack_entry = allocate<state_stack_entry_t>(&stack.alloc);
     new_stack_entry->node_desc = node_desc;
 
@@ -27,4 +29,6 @@ void push_state(node_state_stack_t& stack,
 
     new_stack_entry->prev = stack.top_entry;
     stack.top_entry = new_stack_entry;
+}
+
 }

@@ -3,13 +3,15 @@
 #include "internal_alloc_types.h"
 
 namespace hle_audio {
-    struct NodeDesc;
+    
+namespace rt {
+    struct node_desc_t;
 }
 
 struct state_stack_entry_t {
     state_stack_entry_t* prev;
 
-    const hle_audio::NodeDesc *node_desc;
+    const hle_audio::rt::node_desc_t* node_desc;
     void* state_data;
 };
 
@@ -23,4 +25,6 @@ void deinit(node_state_stack_t& stack);
 
 void pop_up_state(node_state_stack_t& stack);
 void push_state(node_state_stack_t& stack, 
-            const hle_audio::NodeDesc* node_desc, const memory_layout_t& layout);
+            const hle_audio::rt::node_desc_t* node_desc, const memory_layout_t& layout);
+
+}
