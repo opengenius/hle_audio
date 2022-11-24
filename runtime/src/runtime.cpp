@@ -1,6 +1,7 @@
 #include "hlea/runtime.h"
 
 #include <cassert>
+#include <algorithm>
 #include "miniaudio.h"
 #include "alloc_utils.inl"
 #include "file_api_vfs_bridge.h"
