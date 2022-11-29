@@ -100,8 +100,9 @@ static void update_mutable_view_state(app_state_t* state) {
     }
     update_active_group(state, selected_group);
 
+    // todo: check index update case (when some previous events were removed)
     auto selected_event_index = view_state.active_event_index;
-    if (data_state.events.size() == 0u) {
+    if (data_state.events.size() <= selected_event_index) {
         selected_event_index = invalid_index;
     }
     update_active_event(state, selected_event_index);
