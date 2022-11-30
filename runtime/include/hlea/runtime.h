@@ -20,7 +20,7 @@ struct hlea_context_create_info_t {
     uint8_t output_bus_count;
 };
 hlea_context_t* hlea_create(hlea_context_create_info_t* info);
-void hlea_destroy(hlea_context_t* impl_data);
+void hlea_destroy(hlea_context_t* ctx);
 
 void hlea_suspend(hlea_context_t* ctx);
 void hlea_wakeup(hlea_context_t* ctx);
@@ -28,16 +28,16 @@ void hlea_wakeup(hlea_context_t* ctx);
 /**
  * banks
  */
-hlea_event_bank_t* hlea_load_events_bank(hlea_context_t* impl_data, const char* bank_filename);
-hlea_event_bank_t* hlea_load_events_bank_from_buffer(hlea_context_t* impl_data, const uint8_t* buf, size_t buf_size);
-void hlea_unload_events_bank(hlea_context_t* impl_data, hlea_event_bank_t* bank);
+hlea_event_bank_t* hlea_load_events_bank(hlea_context_t* ctx, const char* bank_filename);
+hlea_event_bank_t* hlea_load_events_bank_from_buffer(hlea_context_t* ctx, const uint8_t* buf, size_t buf_size);
+void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank);
 
 /**
  * events api
  */
-void hlea_process_active_groups(hlea_context_t* impl_data);
+void hlea_process_active_groups(hlea_context_t* ctx);
 
-void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id);
+void hlea_fire_event(hlea_context_t* ctx, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id);
 
 enum class hlea_action_type_e {
     play_single,
@@ -64,11 +64,11 @@ struct hlea_fire_event_info_t {
     hlea_action_info_t* actions;
     size_t action_count;
 };
-void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* event_info);
+void hlea_fire_event(hlea_context_t* ctx, const hlea_fire_event_info_t* event_info);
 
 // volumes
-void hlea_set_main_volume(hlea_context_t* impl_data, float volume);
-void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float volume);
+void hlea_set_main_volume(hlea_context_t* ctx, float volume);
+void hlea_set_bus_volume(hlea_context_t* ctx, uint8_t bus_index, float volume);
 
 /** 
  * editor api

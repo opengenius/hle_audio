@@ -122,25 +122,25 @@ static const char* s_sounds_path; // file path prefix to use in file loading
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-static sound_data_t* get_sound_data(hlea_context_t* impl_data, sound_id_t sound_id) {
-    return &impl_data->sounds[sound_id - 1];
+static sound_data_t* get_sound_data(hlea_context_t* ctx, sound_id_t sound_id) {
+    return &ctx->sounds[sound_id - 1];
 }
 
-static sound_id_t acquire_sound(hlea_context_t* impl_data, sound_data_t** out_sound_ptr) {
-    assert(impl_data);
+static sound_id_t acquire_sound(hlea_context_t* ctx, sound_data_t** out_sound_ptr) {
+    assert(ctx);
     assert(out_sound_ptr);
 
     sound_index_t sound_index = 0u;
-    if (impl_data->recycled_count) {
-        sound_index = impl_data->recycled_sound_indices[--impl_data->recycled_count];
+    if (ctx->recycled_count) {
+        sound_index = ctx->recycled_sound_indices[--ctx->recycled_count];
     } else {
-        if (impl_data->sounds_allocated == MAX_SOUNDS) return (sound_id_t)0u;
-        sound_index = impl_data->sounds_allocated++;
+        if (ctx->sounds_allocated == MAX_SOUNDS) return (sound_id_t)0u;
+        sound_index = ctx->sounds_allocated++;
     }
 
     sound_id_t sound_id = (sound_id_t)(sound_index + 1);
 
-    sound_data_t* data_ptr = get_sound_data(impl_data, sound_id);
+    sound_data_t* data_ptr = get_sound_data(ctx, sound_id);
 
     const sound_data_t null_data = {};
     *data_ptr = null_data;
@@ -149,14 +149,14 @@ static sound_id_t acquire_sound(hlea_context_t* impl_data, sound_data_t** out_so
     return sound_id;
 }
 
-static void release_sound(hlea_context_t* impl_data, sound_id_t sound_id) {
-    assert(impl_data);
+static void release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
+    assert(ctx);
     assert(sound_id);
 
     sound_index_t sound_index = sound_id - 1;
 
-    assert(impl_data->recycled_count < MAX_SOUNDS);
-    impl_data->recycled_sound_indices[impl_data->recycled_count++] = sound_index;
+    assert(ctx->recycled_count < MAX_SOUNDS);
+    ctx->recycled_sound_indices[ctx->recycled_count++] = sound_index;
 }
 
 static uint32_t scan_uint32(const uint8_t** data_ptr) {
@@ -655,12 +655,12 @@ static void group_active_stop_with_fade(hlea_context_t* ctx, group_data_t& group
     sound_fade_and_stop(ctx, group.next_sound_id, fade_time_pcm);
 }
 
-static void group_stop(hlea_context_t* impl_data, const event_desc_t* desc) {
-    auto active_index = find_active_group_index(impl_data, desc);
+static void group_stop(hlea_context_t* ctx, const event_desc_t* desc) {
+    auto active_index = find_active_group_index(ctx, desc);
 
-    if (active_index == impl_data->active_groups_size) return;
+    if (active_index == ctx->active_groups_size) return;
 
-    group_active_stop_with_fade(impl_data, impl_data->active_groups[active_index], desc->fade_time);
+    group_active_stop_with_fade(ctx, ctx->active_groups[active_index], desc->fade_time);
 }
 
 
@@ -721,12 +721,12 @@ static void group_resume(hlea_context_t* ctx, const event_desc_t* desc) {
     group_active_resume_with_fade(ctx, ctx->active_groups[active_index], desc->fade_time);
 }
 
-static void group_stop_all(hlea_context_t* impl_data, const event_desc_t* desc) {
-    for (size_t it_index = 0u; it_index < impl_data->active_groups_size; ++it_index) {
-        auto& group = impl_data->active_groups[it_index];
+static void group_stop_all(hlea_context_t* ctx, const event_desc_t* desc) {
+    for (size_t it_index = 0u; it_index < ctx->active_groups_size; ++it_index) {
+        auto& group = ctx->active_groups[it_index];
 
         if (group.obj_id == desc->obj_id) {
-            group_active_stop_with_fade(impl_data, group, desc->fade_time);
+            group_active_stop_with_fade(ctx, group, desc->fade_time);
         }
     }
 }
@@ -757,16 +757,16 @@ static void group_resume_bus(hlea_context_t* ctx, const event_desc_t* desc) {
     apply_to_groups_with_bus(ctx, desc, group_active_resume_with_fade);
 }
 
-static void group_break_loop(hlea_context_t* impl_data, const event_desc_t* desc) {
-    auto active_index = find_active_group_index(impl_data, desc);
+static void group_break_loop(hlea_context_t* ctx, const event_desc_t* desc) {
+    auto active_index = find_active_group_index(ctx, desc);
 
-    if (active_index == impl_data->active_groups_size) return;
+    if (active_index == ctx->active_groups_size) return;
 
-    group_data_t& group = impl_data->active_groups[active_index];
-    auto sound_data_ptr = get_sound_data(impl_data, group.sound_id);
+    group_data_t& group = ctx->active_groups[active_index];
+    auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
     ma_sound_set_looping(&sound_data_ptr->engine_sound, false);
     
-    start_next_after_current(impl_data, group);
+    start_next_after_current(ctx, group);
 }
 
 static void uninit_and_release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
@@ -962,52 +962,52 @@ void hlea_process_active_groups(hlea_context_t* ctx) {
     }
 }
 
-static void fire_event(hlea_context_t* impl_data, hlea_action_type_e event_type, const event_desc_t* desc) {
+static void fire_event(hlea_context_t* ctx, hlea_action_type_e event_type, const event_desc_t* desc) {
     switch(event_type) {
         case hlea_action_type_e::play: {
-            group_play(impl_data, desc);
+            group_play(ctx, desc);
             break;
         }
         case hlea_action_type_e::play_single: {
-            group_play_single(impl_data, desc);
+            group_play_single(ctx, desc);
             break;
         }
         case hlea_action_type_e::stop: {
-            group_stop(impl_data, desc);
+            group_stop(ctx, desc);
             break;
         }
         case hlea_action_type_e::pause: {
-            group_pause(impl_data, desc);
+            group_pause(ctx, desc);
             break;
         }
         case hlea_action_type_e::resume: {
-            group_resume(impl_data, desc);
+            group_resume(ctx, desc);
             break;
         }
         case hlea_action_type_e::stop_all: {
-            group_stop_all(impl_data, desc);
+            group_stop_all(ctx, desc);
             break;
         }
         case hlea_action_type_e::break_loop: {
-            group_break_loop(impl_data, desc);
+            group_break_loop(ctx, desc);
             break;
         }
         case hlea_action_type_e::stop_bus: {
-            group_stop_bus(impl_data, desc);
+            group_stop_bus(ctx, desc);
             break;
         }
         case hlea_action_type_e::pause_bus: {
-            group_pause_bus(impl_data, desc);
+            group_pause_bus(ctx, desc);
             break;
         }
         case hlea_action_type_e::resume_bus: {
-            group_resume_bus(impl_data, desc);
+            group_resume_bus(ctx, desc);
             break;
         }
     }
 }
 
-void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id) {
+void hlea_fire_event(hlea_context_t* ctx, hlea_event_bank_t* bank, const char* eventName, uint32_t obj_id) {
     // find event with binary search
     // todo: replace with hash index
     auto buf_ptr = bank->data_buffer_ptr;
@@ -1034,11 +1034,11 @@ void hlea_fire_event(hlea_context_t* impl_data, hlea_event_bank_t* bank, const c
         desc.fade_time = action->fade_time;
 
         auto type = (hlea_action_type_e)((int)(action->type) - 1);
-        fire_event(impl_data, type, &desc);
+        fire_event(ctx, type, &desc);
     }
 }
 
-void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* event_info) {
+void hlea_fire_event(hlea_context_t* ctx, const hlea_fire_event_info_t* event_info) {
     assert(event_info);
 
     for (uint32_t action_index = 0u; action_index< event_info->action_count; ++action_index) {
@@ -1050,16 +1050,16 @@ void hlea_fire_event(hlea_context_t* impl_data, const hlea_fire_event_info_t* ev
         desc.obj_id = event_info->obj_id;
         desc.fade_time = action.fade_time;
 
-        fire_event(impl_data, action.type, &desc);
+        fire_event(ctx, action.type, &desc);
     }
 }
 
-void hlea_set_main_volume(hlea_context_t* impl_data, float volume) {
-    ma_engine_set_volume(&impl_data->engine, volume);   
+void hlea_set_main_volume(hlea_context_t* ctx, float volume) {
+    ma_engine_set_volume(&ctx->engine, volume);   
 }
 
-void hlea_set_bus_volume(hlea_context_t* impl_data, uint8_t bus_index, float volume) {
-    ma_sound_group_set_volume(&impl_data->output_bus_groups[bus_index], volume);
+void hlea_set_bus_volume(hlea_context_t* ctx, uint8_t bus_index, float volume) {
+    ma_sound_group_set_volume(&ctx->output_bus_groups[bus_index], volume);
 }
 
 /** 
