@@ -593,6 +593,9 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
         auto group_data = bank_get_group(desc->bank, desc->target_index);
 
         ma_sound_set_volume(sound, group_data->volume);
+        if (0 < desc->fade_time) {
+            ma_sound_set_fade_in_milliseconds(sound, 0, 1, desc->fade_time * 1000);
+        }
         ma_sound_start(sound);
 
         group_make_next_sound(ctx, group);
