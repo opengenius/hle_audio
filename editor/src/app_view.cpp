@@ -746,7 +746,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     }
     mut_view_state.add_node_type = rt::node_type_e::None;
     if (ImGui::BeginPopup("create_node_popup")) {
-        for (int i = 1; i <= std::size(rt::c_node_type_names); i++) {
+        for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
             if (ImGui::Selectable(rt::c_node_type_names[i])) {
                 mut_view_state.add_node_type = (rt::node_type_e)i;
                 action = view_action_type_e::NODE_ADD;
