@@ -19,6 +19,7 @@ enum class view_action_type_e {
 
     NODE_UPDATE,
     NODE_ADD,
+    NODE_REMOVE,
 
     EVENT_ADD,
     EVENT_REMOVE,
@@ -54,19 +55,18 @@ struct bus_edit_data_t {
 struct node_action_data_t {
     node_desc_t node_desc;
 
-    view_action_type_e action;
+    // todo: replace with std::variant
     union {
-        uint16_t repeat_count;
+        rt::node_type_e add_node_type; // NODE_ADD
+        uint16_t repeat_count; // NODE_UPDATE
+        uint32_t node_index; // NODE_REMOVE
     } action_data;
 
-    bool action_add;
     bool action_assign_sound;
     bool action_switch_loop;
     bool action_switch_stream;
 
     node_desc_t parent_node_desc;
-    uint32_t node_index;
-    bool action_remove;
 };
 
 struct view_state_t {
@@ -76,6 +76,7 @@ struct view_state_t {
     bool select_events_tab = false;
     bool focus_selected_event = false;
     bool focus_selected_group = false;
+    bool apply_edit_focus_on_group = false;
 
     bool has_save = false;
     bool has_undo = false;
@@ -98,15 +99,12 @@ struct view_state_t {
     event_t event_state;
     size_t event_action_cmd_index;
 
-    // add node popup
-    node_desc_t add_node_target;
-
     // sound file list
     const std::vector<std::string>* sound_files_u8_names_ptr;
     size_t selected_sound_file_index = invalid_index;
 
     std::vector<int> output_bus_volumes;
-    bus_edit_data_t bus_edit_state;
+    bus_edit_data_t bus_edit_state = {};
     size_t action_bus_index;
 
     struct group_info_t {
@@ -117,8 +115,7 @@ struct view_state_t {
     size_t runtime_target_index;
 
     // actions
-    rt::node_type_e add_node_type;    
-    node_action_data_t node_action;
+    node_action_data_t node_action = {};
     size_t action_group_index;
 };
 

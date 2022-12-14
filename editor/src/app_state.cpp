@@ -178,6 +178,8 @@ app_state_t* create_app_state(float scale) {
     init(&res->bl_state);
     
     // setup view
+    const view_state_t empty_vs = {};
+    res->view_state = empty_vs;
     res->view_state.scale = scale;
     res->view_state.root_pane_width_scaled = 200 * scale;
 
@@ -298,6 +300,7 @@ void process_frame(app_state_t* state) {
         auto new_group_index = view_state.action_group_index + 1;
         create_group(bl_state, new_group_index); // todo support create before/after
         update_active_group(state, new_group_index);
+        view_state.apply_edit_focus_on_group = true;
         update_mutable_view_state(state);
         break;
     }
@@ -343,19 +346,28 @@ void process_frame(app_state_t* state) {
         break;
 
     case view_action_type_e::NODE_ADD: {
-        if (view_state.add_node_type != rt::node_type_e::None) {
-            if (view_state.add_node_target.type == rt::node_type_e::None) {
-                create_root_node(bl_state, 
-                    view_state.active_group_index,
-                    view_state.add_node_type);
-            } else if (view_state.add_node_target.type == rt::node_type_e::Repeat) {
-                create_repeat_node(bl_state, view_state.add_node_target, view_state.add_node_type);
-            } else {
-                // this is add child node
-                create_node(bl_state, view_state.add_node_target, view_state.add_node_type);
-            }
-            update_mutable_view_state(state);
+        auto& node_action = view_state.node_action;
+        auto add_node_type = node_action.action_data.add_node_type;
+        assert(add_node_type != rt::node_type_e::None);
+
+        switch (node_action.node_desc.type)
+        {
+        case rt::node_type_e::None:
+            create_root_node(bl_state, view_state.active_group_index, add_node_type);
+            break;
+        
+        case rt::node_type_e::Repeat:
+            create_repeat_node(bl_state, node_action.node_desc, add_node_type);
+
+            break;
+        default:
+            // this is add child node
+            create_node(bl_state, node_action.node_desc, add_node_type);
+
+            break;
         }
+        update_mutable_view_state(state);
+
         break;
     }
     case view_action_type_e::NODE_UPDATE: {
@@ -371,7 +383,20 @@ void process_frame(app_state_t* state) {
         }
         break;
     }
+    case view_action_type_e::NODE_REMOVE: {
+        auto& node_action = view_state.node_action;
+        if (node_action.parent_node_desc.type == rt::node_type_e::None) {
+            // root node case, detach from group
+            remove_root_node(bl_state, 
+                view_state.active_group_index);
+        } else {
+            remove_node(bl_state, 
+                node_action.parent_node_desc, node_action.action_data.node_index);
+        }
+        update_mutable_view_state(state);
 
+        break;        
+    }
     case view_action_type_e::REFRESH_SOUND_LIST:
         refresh_wav_list(state);
         break;
@@ -500,32 +525,25 @@ void process_frame(app_state_t* state) {
     }
 
     auto& node_action = view_state.node_action;
-    if (node_action.action_remove) {
-        if (node_action.parent_node_desc.type == rt::node_type_e::None) {
-            // root node case, detach from group
-            remove_root_node(bl_state, 
-                view_state.active_group_index);
-        } else {
-            remove_node(bl_state, 
-                node_action.parent_node_desc, node_action.node_index);
-        }
-    }
+
     if (node_action.action_assign_sound) {
-        if (node_action.node_desc.type == rt::node_type_e::File) {
-            auto file_list_index = state->view_state.selected_sound_file_index;
-            const auto& filename = state->sound_files_u8_names[file_list_index];
-            assign_file_node_file(bl_state, node_action.node_desc, filename);
-        }
+        assert(node_action.node_desc.type == rt::node_type_e::File);
+
+        auto file_list_index = state->view_state.selected_sound_file_index;
+        const auto& filename = state->sound_files_u8_names[file_list_index];
+        assign_file_node_file(bl_state, node_action.node_desc, filename);
     }
+
     if (node_action.action_switch_loop) {
-        if (node_action.node_desc.type == rt::node_type_e::File) {
-            switch_file_node_loop(bl_state, node_action.node_desc);
-        }
+        assert(node_action.node_desc.type == rt::node_type_e::File);
+
+        switch_file_node_loop(bl_state, node_action.node_desc);
     }
+
     if (node_action.action_switch_stream) {
-        if (node_action.node_desc.type == rt::node_type_e::File) {
-            switch_file_node_stream(bl_state, node_action.node_desc);
-        }
+        assert(node_action.node_desc.type == rt::node_type_e::File);
+
+        switch_file_node_stream(bl_state, node_action.node_desc);
     }
 }
 

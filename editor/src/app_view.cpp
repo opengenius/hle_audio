@@ -27,7 +27,7 @@ static bool TreeNodeWithRemoveButton(uint32_t node_index, const char* label, boo
 static void build_node_tree(const data_state_t& state, const view_state_t& view_state,
                 const node_desc_t& parent_node_desc,
                 uint32_t node_index, const node_desc_t& node_desc,
-                node_action_data_t& out_action) {
+                node_action_data_t& out_action, view_action_type_e& out_action_type) {
     bool add_node = false;
     bool removePressed = false;
 
@@ -80,7 +80,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
             auto node_ptr = get_child_nodes_ptr(&state, node_desc);
             uint32_t child_index = 0;
             for (auto& child_desc : *node_ptr) {
-                build_node_tree(state, view_state, node_desc, child_index++, child_desc, out_action);
+                build_node_tree(state, view_state, node_desc, child_index++, child_desc, out_action, out_action_type);
             }
             if (ImGui::SmallButton("Add...")) {
                 add_node = true;
@@ -105,13 +105,13 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changing_node = {};
 
-                out_action.action = view_action_type_e::NODE_UPDATE;
+                out_action_type = view_action_type_e::NODE_UPDATE;
                 out_action.node_desc = node_desc;
                 out_action.action_data.repeat_count = changing_value;
             }
 
             if (repeat_node.node.type != rt::node_type_e::None) {
-                build_node_tree(state, view_state, node_desc, 0, repeat_node.node, out_action);
+                build_node_tree(state, view_state, node_desc, 0, repeat_node.node, out_action, out_action_type);
             } else if (ImGui::SmallButton("Add...")) {
                 add_node = true;
             }
@@ -125,12 +125,23 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
 
     if (add_node) {
         out_action.node_desc = node_desc;
-        out_action.action_add = true;
+        ImGui::OpenPopup("create_node_popup");
     }
+
+    if (ImGui::BeginPopup("create_node_popup")) {
+        for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
+            if (ImGui::Selectable(rt::c_node_type_names[i])) {
+                out_action_type = view_action_type_e::NODE_ADD;
+                out_action.action_data.add_node_type = (rt::node_type_e)i;
+            }
+        }
+        ImGui::EndPopup();
+    }
+
     if (removePressed) {
+        out_action_type = view_action_type_e::NODE_REMOVE;
         out_action.parent_node_desc = parent_node_desc;
-        out_action.node_index = node_index;
-        out_action.action_remove = true;
+        out_action.action_data.node_index = node_index;
     }
 }
 
@@ -252,7 +263,7 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool
 }
 
 static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
-                view_action_type_e& action, node_action_data_t& node_action) {
+                view_action_type_e& action) {
     auto& group_state = mut_view_state.selected_group_state;
 
     ImGui_std::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
@@ -283,13 +294,12 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
     auto data = (void*)&data_state.output_buses;
     if (ImGui::Combo("output bus", &current_index, 
             getter, data, (int)data_state.output_buses.size())) {
-    // if (current_index != action_ptr->type) {
         group_state.output_bus_index = current_index;
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
     ImGui::Text("Node tree:");
-    build_node_tree(data_state, mut_view_state, invalid_node_desc, 0, group_state.node, node_action);
+    build_node_tree(data_state, mut_view_state, invalid_node_desc, 0, group_state.node, mut_view_state.node_action, action);
 
     ImGui::Separator();
     if (ImGui::Button("<<< Filter events")) {
@@ -413,11 +423,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             &mut_view_state.root_pane_width_scaled, &root_pane_width_max, 
             50 * mut_view_state.scale, 8);
 
-    static bool focus_new_group = false;
-
-    bool do_focus_new_group = focus_new_group;
-    focus_new_group = false;
-    
     const auto active_group_index = mut_view_state.active_group_index;
     mut_view_state.action_group_index = active_group_index;
     {
@@ -430,20 +435,19 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             // sound groups
             //
             if (ImGui::BeginTabItem("Groups")) {
-                bool scroll_to_end = false;
+
+                bool do_focus_group = mut_view_state.focus_selected_group;
+                mut_view_state.focus_selected_group = false;
+
                 if (ImGui::Button("+")) {
                     action = view_action_type_e::GROUP_ADD;
                     mut_view_state.action_group_index = data_state.groups.size() - 1;
+                    mut_view_state.focus_selected_group = true;
                 }
 
                 ImGui::Separator();
 
                 ImGui::BeginChild("Groups_list");
-
-                bool force_display_selected = mut_view_state.focus_selected_group;
-                if (mut_view_state.focus_selected_group) {
-                    mut_view_state.focus_selected_group = false;
-                }
 
                 bool add_pressed = false;
                 bool remove_pressed = false;
@@ -452,17 +456,14 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 ClippedListWithAddRemoveButtons(
                     groups_size, 
                     mut_view_state.scale, 
-                    force_display_selected, mut_view_state.active_group_index, 
+                    do_focus_group, mut_view_state.active_group_index, 
                     &data_state.groups, [](const void* ud, int index) {
                         auto elems_ptr = (const groups_type_t*)ud;
                         return elems_ptr->at(index).name.c_str();
                     },
                     &mut_view_state.active_group_index,
                     &add_pressed, &remove_pressed);
-                // scroll to end when new group is added
-                if (do_focus_new_group && active_group_index == groups_size - 1) {
-                    ImGui::SetScrollHereY();
-                }
+
                 if (add_pressed) {
                     action = view_action_type_e::GROUP_ADD;
                 }
@@ -543,26 +544,22 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         ImGui::EndChild();
     }
 
-    node_action_data_t node_action = {};
-
     auto& style = ImGui::GetStyle();
     const float wav_list_width = 200 * mut_view_state.scale;
 
     ImGui::SameLine();
     ImGui::BeginChild("Properties pane", ImVec2(-wav_list_width - style.WindowPadding.x, 0), true);
 
+    auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
+    mut_view_state.apply_edit_focus_on_group = false;
     if (active_group_index != invalid_index) {
         if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
-            if (do_focus_new_group) {
+            if (apply_edit_focus_on_group) {
                 ImGui::SetKeyboardFocusHere();
             }
 
-            build_selected_group_view(mut_view_state, data_state, action, node_action);
+            build_selected_group_view(mut_view_state, data_state, action);
         }
-    }
-    mut_view_state.node_action = node_action;
-    if (node_action.action != view_action_type_e::NONE) {
-        action = node_action.action;
     }
 
     const auto active_event_index = mut_view_state.active_event_index;
@@ -759,20 +756,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
 
     ImGui::EndChild(); // right pane
 
-    if (node_action.action_add) {
-        mut_view_state.add_node_target = node_action.node_desc;
-        ImGui::OpenPopup("create_node_popup");
-    }
-    mut_view_state.add_node_type = rt::node_type_e::None;
-    if (ImGui::BeginPopup("create_node_popup")) {
-        for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
-            if (ImGui::Selectable(rt::c_node_type_names[i])) {
-                mut_view_state.add_node_type = (rt::node_type_e)i;
-                action = view_action_type_e::NODE_ADD;
-            }
-        }
-        ImGui::EndPopup();
-    }
 
     // hotkyes
     // todo: unify actions with main menus
@@ -787,13 +770,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
             action = view_action_type_e::REDO;
         }
-    }
-
-    switch (action)
-    {
-    case view_action_type_e::GROUP_ADD:
-        focus_new_group = true;
-        break;
     }
 
     return action;
