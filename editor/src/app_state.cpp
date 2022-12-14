@@ -238,9 +238,6 @@ void process_frame(app_state_t* state) {
      */
     auto& view_state = state->view_state;
 
-    const auto prev_group_index = view_state.active_group_index;
-    const auto prev_event_index = view_state.event_list_index;
-
     // map active_group_infos to view_state data
     view_state.active_group_infos.clear();
     for (auto& info : state->active_group_infos) {
@@ -258,6 +255,9 @@ void process_frame(app_state_t* state) {
     view_state.has_redo = has_redo(&state->bl_state.cmds);
     view_state.has_wav_playing = hlea_is_file_playing(state->runtime_ctx);
     view_state.sound_files_u8_names_ptr = &state->sound_files_u8_names;
+
+    const auto prev_group_index = view_state.active_group_index;
+    const auto prev_event_index = view_state.event_list_index;
 
     auto action = build_view(view_state, state->bl_state.data_state);
 
@@ -339,6 +339,7 @@ void process_frame(app_state_t* state) {
         break;
     case view_action_type_e::EVENT_FILTER:
         filter_events(state);
+        state->view_state.focus_selected_event = true;
         break;
 
     case view_action_type_e::NODE_ADD: {
@@ -353,6 +354,7 @@ void process_frame(app_state_t* state) {
                 // this is add child node
                 create_node(bl_state, view_state.add_node_target, view_state.add_node_type);
             }
+            update_mutable_view_state(state);
         }
         break;
     }

@@ -207,7 +207,7 @@ static view_action_type_e process_view_menu(const view_state_t& view_state) {
 
 typedef const char* (*get_text_at_index_cb)(const void* ud, int index);
 
-static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale,
+static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool force_display_selected,
                 size_t selected_index, const void* ud, get_text_at_index_cb get_text_at_index,
                 size_t* new_selected_index, bool* add_pressed, bool* remove_pressed, bool* double_clicked = nullptr) {
     assert(new_selected_index);
@@ -216,6 +216,7 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale,
 
     ImGuiListClipper clipper;
     clipper.Begin((int)elem_count);
+
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
             ImGui::PushID(i);
@@ -242,6 +243,11 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale,
             }
             ImGui::PopID();
         }
+    }
+
+    if (force_display_selected) {
+        float item_pos_y = clipper.StartPosY + clipper.ItemsHeight * selected_index;
+        ImGui::SetScrollFromPosY(item_pos_y - ImGui::GetWindowPos().y);
     }
 }
 
@@ -434,13 +440,19 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
 
                 ImGui::BeginChild("Groups_list");
 
+                bool force_display_selected = mut_view_state.focus_selected_group;
+                if (mut_view_state.focus_selected_group) {
+                    mut_view_state.focus_selected_group = false;
+                }
+
                 bool add_pressed = false;
                 bool remove_pressed = false;
                 using groups_type_t = decltype(data_state.groups);
                 auto groups_size = data_state.groups.size();
                 ClippedListWithAddRemoveButtons(
                     groups_size, 
-                    mut_view_state.scale, mut_view_state.active_group_index, 
+                    mut_view_state.scale, 
+                    force_display_selected, mut_view_state.active_group_index, 
                     &data_state.groups, [](const void* ud, int index) {
                         auto elems_ptr = (const groups_type_t*)ud;
                         return elems_ptr->at(index).name.c_str();
@@ -490,6 +502,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 bool add_pressed = false;
                 bool remove_pressed = false;
                 bool double_clicked = false;
+
+                bool force_display_selected = mut_view_state.focus_selected_event;
+                if (mut_view_state.focus_selected_event) {
+                    mut_view_state.focus_selected_event = false;
+                }
             
                 struct clipper_ctx {
                     view_state_t& mut_view_state;
@@ -498,7 +515,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 clipper_ctx ctx = {mut_view_state, data_state};
                 ClippedListWithAddRemoveButtons(
                     (int)mut_view_state.filtered_event_indices.size(), 
-                    mut_view_state.scale, mut_view_state.event_list_index, 
+                    mut_view_state.scale, 
+                    force_display_selected, mut_view_state.event_list_index, 
                     &ctx, [](const void* ud, int index) {
                         auto ctx_ptr = (clipper_ctx*)ud;
                         auto event_index = ctx_ptr->mut_view_state.filtered_event_indices[index];
@@ -616,6 +634,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
 
                             if (ImGui::MenuItem("Show group")) {
                                 mut_view_state.active_group_index = ev_action.target_index;
+                                mut_view_state.focus_selected_group = true;
                             }
                         }
                         

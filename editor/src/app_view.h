@@ -74,6 +74,8 @@ struct view_state_t {
 
     float root_pane_width_scaled;
     bool select_events_tab = false;
+    bool focus_selected_event = false;
+    bool focus_selected_group = false;
 
     bool has_save = false;
     bool has_undo = false;
