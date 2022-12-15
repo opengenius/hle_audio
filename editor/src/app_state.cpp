@@ -56,27 +56,63 @@ static void update_active_event(app_state_t* state, size_t active_index) {
     view_state.event_state = event;
 }
 
+/*
+static void filter_groups(app_state_t* state) {
+    auto& view_state = state->view_state;
+
+    auto& list_state = view_state.group_filtered_state;
+
+    list_state.indices.clear();
+    list_state.list_index = invalid_index;
+
+    const auto& groups = state->bl_state.data_state.groups;
+    for (size_t group_index = 0; group_index < groups.size(); ++group_index) {
+        auto& group = groups[group_index];
+
+        // skip if name doesn't match
+        if (group.name.find(view_state.group_filter_str) == std::string::npos) continue;
+
+        list_state.indices.push_back(group_index);
+
+        if (view_state.active_group_index == group_index) {
+            list_state.list_index = list_state.indices.size() - 1;
+        }
+    }
+}*/
+
+static bool find_substring_ic(std::string_view str, std::string_view substr)
+{
+    return std::search(
+        str.begin(), str.end(),
+        substr.begin(), substr.end(),
+        [](char ch1, char ch2) { 
+            return std::toupper(ch1) == std::toupper(ch2); 
+        }
+    ) != str.end();
+}
+
 static void filter_events(app_state_t* state) {
     auto& view_state = state->view_state;
 
-    view_state.filtered_event_indices.clear();
-    view_state.event_list_index = invalid_index;
+    auto& filtered_state = view_state.events_filtered_state;
+    filtered_state.indices.clear();
+    filtered_state.list_index = invalid_index;
 
     const auto& events = state->bl_state.data_state.events;
     for (size_t event_index = 0; event_index < events.size(); ++event_index) {
         auto& event = events[event_index];
 
         // skip if name doesn't match
-        if (event.name.find(view_state.event_filter_str) == std::string::npos) continue;
+        if (!find_substring_ic(event.name, view_state.event_filter_str)) continue;
 
         // filter group
         if (view_state.event_filter_group_index != invalid_index &&
             !is_event_target_group(event, view_state.event_filter_group_index)) continue;
 
-        view_state.filtered_event_indices.push_back(event_index);
+        filtered_state.indices.push_back(event_index);
 
         if (view_state.active_event_index == event_index) {
-            view_state.event_list_index = view_state.filtered_event_indices.size() - 1;
+            filtered_state.list_index = filtered_state.indices.size() - 1;
         }
     }
 }
@@ -107,6 +143,7 @@ static void update_mutable_view_state(app_state_t* state) {
     }
     update_active_event(state, selected_event_index);
 
+    // (n) ? try skipping without any filter applied ?
     filter_events(state);
 }
 
@@ -259,7 +296,7 @@ void process_frame(app_state_t* state) {
     view_state.sound_files_u8_names_ptr = &state->sound_files_u8_names;
 
     const auto prev_group_index = view_state.active_group_index;
-    const auto prev_event_index = view_state.event_list_index;
+    const auto prev_event_index = view_state.events_filtered_state.list_index;
 
     auto action = build_view(view_state, state->bl_state.data_state);
 
@@ -269,8 +306,8 @@ void process_frame(app_state_t* state) {
     if (prev_group_index != view_state.active_group_index)
         update_active_group(state, view_state.active_group_index);
 
-    if (prev_event_index != view_state.event_list_index) {
-        auto selected_event_index = view_state.filtered_event_indices[view_state.event_list_index];
+    if (prev_event_index != view_state.events_filtered_state.list_index) {
+        auto selected_event_index = view_state.events_filtered_state.indices[view_state.events_filtered_state.list_index];
         update_active_event(state, selected_event_index);
     }
 
@@ -301,7 +338,6 @@ void process_frame(app_state_t* state) {
         create_group(bl_state, new_group_index); // todo support create before/after
         update_active_group(state, new_group_index);
         view_state.apply_edit_focus_on_group = true;
-        update_mutable_view_state(state);
         break;
     }
     case view_action_type_e::GROUP_REMOVE:
@@ -333,12 +369,12 @@ void process_frame(app_state_t* state) {
     case view_action_type_e::EVENT_ADD_ACTION:
         add_event_action(bl_state, 
             view_state.active_event_index, view_state.active_group_index);
-        update_mutable_view_state(state);
+        update_active_event(state, view_state.active_event_index);
         break;
     case view_action_type_e::EVENT_REMOVE_ACTION:
         remove_event_action(bl_state, 
             view_state.active_event_index, view_state.event_action_cmd_index);
-        update_mutable_view_state(state);
+        update_active_event(state, view_state.active_event_index);
         break;
     case view_action_type_e::EVENT_FILTER:
         filter_events(state);
@@ -366,7 +402,7 @@ void process_frame(app_state_t* state) {
 
             break;
         }
-        update_mutable_view_state(state);
+        update_active_group(state, view_state.active_group_index);
 
         break;
     }
@@ -393,7 +429,7 @@ void process_frame(app_state_t* state) {
             remove_node(bl_state, 
                 node_action.parent_node_desc, node_action.action_data.node_index);
         }
-        update_mutable_view_state(state);
+        update_active_group(state, view_state.active_group_index);
 
         break;        
     }

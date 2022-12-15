@@ -515,15 +515,15 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 };
                 clipper_ctx ctx = {mut_view_state, data_state};
                 ClippedListWithAddRemoveButtons(
-                    (int)mut_view_state.filtered_event_indices.size(), 
+                    (int)mut_view_state.events_filtered_state.indices.size(), 
                     mut_view_state.scale, 
-                    force_display_selected, mut_view_state.event_list_index, 
+                    force_display_selected, mut_view_state.events_filtered_state.list_index, 
                     &ctx, [](const void* ud, int index) {
                         auto ctx_ptr = (clipper_ctx*)ud;
-                        auto event_index = ctx_ptr->mut_view_state.filtered_event_indices[index];
+                        auto event_index = ctx_ptr->mut_view_state.events_filtered_state.indices[index];
                         return ctx_ptr->data_state.events[event_index].name.c_str();
                     },
-                    &mut_view_state.event_list_index, 
+                    &mut_view_state.events_filtered_state.list_index, 
                     &add_pressed, &remove_pressed, &double_clicked);
                 
                 if (add_pressed) {

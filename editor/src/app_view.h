@@ -83,6 +83,18 @@ struct view_state_t {
     bool has_redo = false;
     bool has_wav_playing = false;
 
+    struct filtered_indices_list_state_t {
+        std::vector<size_t> indices;
+        size_t list_index = invalid_index;
+    };
+
+    // group list
+    /* 
+        better be implemented with optimal call to filter_<events|groups> in update_mutable_view_state
+    std::string group_filter_str;
+    filtered_indices_list_state_t group_filtered_state;
+    */
+
     // groups
     size_t active_group_index = invalid_index;
     named_group_t selected_group_state;
@@ -91,8 +103,7 @@ struct view_state_t {
     std::string event_filter_str;
     size_t event_filter_group_index = invalid_index;
     size_t groups_size_on_event_filter_group;
-    std::vector<size_t> filtered_event_indices;
-    size_t event_list_index = invalid_index;
+    filtered_indices_list_state_t events_filtered_state;
 
     // active event
     size_t active_event_index = invalid_index;
