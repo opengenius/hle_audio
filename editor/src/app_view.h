@@ -86,6 +86,11 @@ struct view_state_t {
     struct filtered_indices_list_state_t {
         std::vector<size_t> indices;
         size_t list_index = invalid_index;
+
+        size_t get_index(size_t index) {
+            // empty indices is considered as no filter
+            return indices.size() ? indices[index] : index;
+        }
     };
 
     // group list

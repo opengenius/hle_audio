@@ -96,6 +96,12 @@ static void filter_events(app_state_t* state) {
 
     auto& filtered_state = view_state.events_filtered_state;
     filtered_state.indices.clear();
+
+    // exit early if no filter
+    if (view_state.event_filter_str.size() == 0 &&
+        view_state.event_filter_group_index == invalid_index)
+        return;
+
     filtered_state.list_index = invalid_index;
 
     const auto& events = state->bl_state.data_state.events;
@@ -307,7 +313,7 @@ void process_frame(app_state_t* state) {
         update_active_group(state, view_state.active_group_index);
 
     if (prev_event_index != view_state.events_filtered_state.list_index) {
-        auto selected_event_index = view_state.events_filtered_state.indices[view_state.events_filtered_state.list_index];
+        auto selected_event_index = view_state.events_filtered_state.get_index(view_state.events_filtered_state.list_index);
         update_active_event(state, selected_event_index);
     }
 
@@ -337,11 +343,14 @@ void process_frame(app_state_t* state) {
         auto new_group_index = view_state.action_group_index + 1;
         create_group(bl_state, new_group_index); // todo support create before/after
         update_active_group(state, new_group_index);
+        // full update as group index could be updated in event actions
+        update_mutable_view_state(state);
         view_state.apply_edit_focus_on_group = true;
         break;
     }
     case view_action_type_e::GROUP_REMOVE:
         remove_group(bl_state, view_state.action_group_index);
+        // full update as event list could be updated
         update_mutable_view_state(state);
         break;
     case view_action_type_e::APPLY_SELECTED_GROUP_UPDATE: {

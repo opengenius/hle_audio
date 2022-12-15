@@ -262,6 +262,35 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool
     }
 }
 
+static void ClippedListWithAddRemoveButtonsFiltered(size_t elem_count, float scale, bool force_display_selected,
+                view_state_t::filtered_indices_list_state_t& filtered_state,
+                const void* ud, get_text_at_index_cb get_text_at_index,
+                bool* add_pressed, bool* remove_pressed, bool* double_clicked = nullptr) {
+
+    struct clipper_ctx_t {
+        view_state_t::filtered_indices_list_state_t& filtered_state;
+        const void* ud;
+        get_text_at_index_cb get_text_at_index;
+    };
+    clipper_ctx_t ctx = {filtered_state, ud, get_text_at_index};
+
+    auto list_size = (0 < filtered_state.indices.size()) ? 
+            filtered_state.indices.size() :
+            elem_count;
+    ClippedListWithAddRemoveButtons(
+        list_size, 
+        scale, 
+        force_display_selected, filtered_state.list_index, 
+        &ctx, [](const void* ud, int index) {
+            auto ctx_ptr = (clipper_ctx_t*)ud;
+
+            auto event_index = ctx_ptr->filtered_state.get_index(index);
+            return ctx_ptr->get_text_at_index(ctx_ptr->ud, event_index);
+        },
+        &filtered_state.list_index, 
+        add_pressed, remove_pressed, double_clicked);
+}
+
 static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
                 view_action_type_e& action) {
     auto& group_state = mut_view_state.selected_group_state;
@@ -509,21 +538,15 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     mut_view_state.focus_selected_event = false;
                 }
             
-                struct clipper_ctx {
-                    view_state_t& mut_view_state;
-                    const data_state_t& data_state;
-                };
-                clipper_ctx ctx = {mut_view_state, data_state};
-                ClippedListWithAddRemoveButtons(
-                    (int)mut_view_state.events_filtered_state.indices.size(), 
+                using data_state_pointer_t = decltype(&data_state);
+                ClippedListWithAddRemoveButtonsFiltered(
+                    data_state.events.size(), 
                     mut_view_state.scale, 
-                    force_display_selected, mut_view_state.events_filtered_state.list_index, 
-                    &ctx, [](const void* ud, int index) {
-                        auto ctx_ptr = (clipper_ctx*)ud;
-                        auto event_index = ctx_ptr->mut_view_state.events_filtered_state.indices[index];
-                        return ctx_ptr->data_state.events[event_index].name.c_str();
+                    force_display_selected, mut_view_state.events_filtered_state, 
+                    &data_state, [](const void* ud, int index) {
+                        auto data_state_ptr = (data_state_pointer_t)ud;
+                        return data_state_ptr->events[index].name.c_str();
                     },
-                    &mut_view_state.events_filtered_state.list_index, 
                     &add_pressed, &remove_pressed, &double_clicked);
                 
                 if (add_pressed) {
