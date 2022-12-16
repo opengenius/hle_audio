@@ -51,21 +51,29 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
             if (TreeNodeWithRemoveButton(node_index, file_name, &removePressed)) {
                 ImGui::BeginDisabled(view_state.selected_sound_file_index == invalid_index);
                 if (ImGui::SmallButton("Use selected sound file")) {
+                    out_action_type = view_action_type_e::NODE_FILE_ASSIGN_SOUND;
                     out_action.node_desc = node_desc;
-                    out_action.action_assign_sound = true;
                 }
                 ImGui::EndDisabled();
 
                 bool loop_state = file_node.loop;
                 if (ImGui::Checkbox("loop", &loop_state)) {
+                    auto file_node_copy = file_node;
+                    file_node_copy.loop = loop_state;
+
+                    out_action_type = view_action_type_e::NODE_UPDATE;
                     out_action.node_desc = node_desc;
-                    out_action.action_switch_loop = true;
+                    out_action.action_data = file_node_copy;
                 }
 
                 bool stream_state = file_node.stream;
                 if (ImGui::Checkbox("stream", &stream_state)) {
+                    auto file_node_copy = file_node;
+                    file_node_copy.stream = stream_state;
+
+                    out_action_type = view_action_type_e::NODE_UPDATE;
                     out_action.node_desc = node_desc;
-                    out_action.action_switch_stream = true;
+                    out_action.action_data = file_node_copy;
                 }
 
                 ImGui::TreePop();
@@ -105,9 +113,12 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changing_node = {};
 
+                auto repeat_node_copy = repeat_node;
+                repeat_node_copy.repeat_count = changing_value;
+
                 out_action_type = view_action_type_e::NODE_UPDATE;
                 out_action.node_desc = node_desc;
-                out_action.action_data.repeat_count = changing_value;
+                out_action.action_data = repeat_node_copy;
             }
 
             if (repeat_node.node.type != rt::node_type_e::None) {
@@ -132,7 +143,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
         for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
             if (ImGui::Selectable(rt::c_node_type_names[i])) {
                 out_action_type = view_action_type_e::NODE_ADD;
-                out_action.action_data.add_node_type = (rt::node_type_e)i;
+                out_action.action_data = (rt::node_type_e)i;
             }
         }
         ImGui::EndPopup();
@@ -141,7 +152,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
     if (removePressed) {
         out_action_type = view_action_type_e::NODE_REMOVE;
         out_action.parent_node_desc = parent_node_desc;
-        out_action.action_data.node_index = node_index;
+        out_action.action_data = node_index;
     }
 }
 

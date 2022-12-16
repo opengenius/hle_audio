@@ -29,10 +29,9 @@ void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size
 void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type);
 
 void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::string& filename);
-void switch_file_node_loop(logic_state_t* state, const node_desc_t& node_desc);
-void switch_file_node_stream(logic_state_t* state, const node_desc_t& node_desc);
+void update_file_node(logic_state_t* state, const node_desc_t& node_desc, const file_node_t& data);
 
-void update_repeat_node_times(logic_state_t* state, const node_desc_t& node_desc, uint16_t times);
+void update_repeat_node(logic_state_t* state, const node_desc_t& node_desc, const node_repeat_t& data);
 
 void create_event(logic_state_t* state, size_t index);
 void remove_event(logic_state_t* state, size_t index);

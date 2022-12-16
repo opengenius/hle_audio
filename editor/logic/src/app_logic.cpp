@@ -228,30 +228,13 @@ void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, c
     execute_cmd_first(state, std::move(cmd));
 }
 
-void switch_file_node_loop(logic_state_t* state, const node_desc_t& node_desc) {
-    auto node = get_file_node(&state->data_state, node_desc.id);
-    
-    node.loop = !node.loop;
-
-    auto cmd = std::make_unique<node_file_update_cmd_t>(node_desc.id, node);
+void update_file_node(logic_state_t* state, const node_desc_t& node_desc, const file_node_t& data) {
+    auto cmd = std::make_unique<node_file_update_cmd_t>(node_desc.id, data);
     execute_cmd_first(state, std::move(cmd));
 }
 
-void switch_file_node_stream(logic_state_t* state, const node_desc_t& node_desc) {
-    auto node = get_file_node(&state->data_state, node_desc.id);
-
-    node.stream = !node.stream;
-
-    auto cmd = std::make_unique<node_file_update_cmd_t>(node_desc.id, node);
-    execute_cmd_first(state, std::move(cmd));
-}
-
-void update_repeat_node_times(logic_state_t* state, const node_desc_t& node_desc, uint16_t times) {
-    auto node = get_repeat_node(&state->data_state, node_desc.id);
-
-    node.repeat_count = times;
-
-    auto cmd = std::make_unique<node_repeat_update_cmd_t>(node_desc.id, node);
+void update_repeat_node(logic_state_t* state, const node_desc_t& node_desc, const node_repeat_t& data) {
+    auto cmd = std::make_unique<node_repeat_update_cmd_t>(node_desc.id, data);
     execute_cmd_first(state, std::move(cmd));
 }
 

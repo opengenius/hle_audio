@@ -2,6 +2,7 @@
 
 #include <vector>
 #include "data_types.h"
+#include <variant>
 
 namespace hle_audio {
 namespace editor {
@@ -20,6 +21,7 @@ enum class view_action_type_e {
     NODE_UPDATE,
     NODE_ADD,
     NODE_REMOVE,
+    NODE_FILE_ASSIGN_SOUND,
 
     EVENT_ADD,
     EVENT_REMOVE,
@@ -53,20 +55,15 @@ struct bus_edit_data_t {
 };
 
 struct node_action_data_t {
+    node_desc_t parent_node_desc;
     node_desc_t node_desc;
 
-    // todo: replace with std::variant
-    union {
-        rt::node_type_e add_node_type; // NODE_ADD
-        uint16_t repeat_count; // NODE_UPDATE
-        uint32_t node_index; // NODE_REMOVE
-    } action_data;
-
-    bool action_assign_sound;
-    bool action_switch_loop;
-    bool action_switch_stream;
-
-    node_desc_t parent_node_desc;
+    std::variant<
+        rt::node_type_e, // NODE_ADD
+        uint32_t,        // NODE_REMOVE
+        file_node_t,     // NODE_UPDATE
+        node_repeat_t
+        > action_data;
 };
 
 struct view_state_t {

@@ -392,7 +392,7 @@ void process_frame(app_state_t* state) {
 
     case view_action_type_e::NODE_ADD: {
         auto& node_action = view_state.node_action;
-        auto add_node_type = node_action.action_data.add_node_type;
+        auto add_node_type = std::get<rt::node_type_e>(node_action.action_data);
         assert(add_node_type != rt::node_type_e::None);
 
         switch (node_action.node_desc.type)
@@ -420,12 +420,26 @@ void process_frame(app_state_t* state) {
         switch (node_action.node_desc.type)
         {
         case rt::node_type_e::Repeat:
-            update_repeat_node_times(bl_state, node_action.node_desc, node_action.action_data.repeat_count);
+            update_repeat_node(bl_state, node_action.node_desc, 
+                    std::get<node_repeat_t>(node_action.action_data));
             break;
-        
+        case rt::node_type_e::File:
+            update_file_node(bl_state, node_action.node_desc, 
+                    std::get<file_node_t>(std::move(node_action.action_data)));
         default:
             break;
         }
+        break;
+    }
+    case view_action_type_e::NODE_FILE_ASSIGN_SOUND: {
+        auto& node_action = view_state.node_action;
+
+        assert(node_action.node_desc.type == rt::node_type_e::File);
+        
+        auto file_list_index = view_state.selected_sound_file_index;
+        const auto& filename = state->sound_files_u8_names[file_list_index];
+        assign_file_node_file(bl_state, node_action.node_desc, filename);
+            
         break;
     }
     case view_action_type_e::NODE_REMOVE: {
@@ -436,7 +450,7 @@ void process_frame(app_state_t* state) {
                 view_state.active_group_index);
         } else {
             remove_node(bl_state, 
-                node_action.parent_node_desc, node_action.action_data.node_index);
+                node_action.parent_node_desc, std::get<uint32_t>(node_action.action_data));
         }
         update_active_group(state, view_state.active_group_index);
 
@@ -567,28 +581,6 @@ void process_frame(app_state_t* state) {
     default:
         assert(false && "unhandled action");
         break;
-    }
-
-    auto& node_action = view_state.node_action;
-
-    if (node_action.action_assign_sound) {
-        assert(node_action.node_desc.type == rt::node_type_e::File);
-
-        auto file_list_index = state->view_state.selected_sound_file_index;
-        const auto& filename = state->sound_files_u8_names[file_list_index];
-        assign_file_node_file(bl_state, node_action.node_desc, filename);
-    }
-
-    if (node_action.action_switch_loop) {
-        assert(node_action.node_desc.type == rt::node_type_e::File);
-
-        switch_file_node_loop(bl_state, node_action.node_desc);
-    }
-
-    if (node_action.action_switch_stream) {
-        assert(node_action.node_desc.type == rt::node_type_e::File);
-
-        switch_file_node_stream(bl_state, node_action.node_desc);
     }
 }
 
