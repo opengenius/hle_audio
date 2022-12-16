@@ -596,9 +596,15 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         }
     }
 
-    const auto active_event_index = mut_view_state.active_event_index;
-    if (active_event_index != invalid_index) {
+    auto apply_edit_focus_on_event = mut_view_state.apply_edit_focus_on_event;
+    mut_view_state.apply_edit_focus_on_event = false;
+            
+    if (mut_view_state.active_event_index != invalid_index) {
         if (ImGui::CollapsingHeader("Event Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (apply_edit_focus_on_event) {
+                ImGui::SetKeyboardFocusHere();
+            }
+
             auto& event_state = mut_view_state.event_state;
             ImGui_std::InputText("name##event_name", nullptr, &event_state.name, ImGuiInputTextFlags_AutoSelectAll);
             if (ImGui::IsItemDeactivatedAfterEdit()) {

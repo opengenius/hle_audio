@@ -74,6 +74,7 @@ struct view_state_t {
     bool focus_selected_event = false;
     bool focus_selected_group = false;
     bool apply_edit_focus_on_group = false;
+    bool apply_edit_focus_on_event = false;
 
     bool has_save = false;
     bool has_undo = false;

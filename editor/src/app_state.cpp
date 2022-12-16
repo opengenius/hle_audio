@@ -99,8 +99,10 @@ static void filter_events(app_state_t* state) {
 
     // exit early if no filter
     if (view_state.event_filter_str.size() == 0 &&
-        view_state.event_filter_group_index == invalid_index)
+        view_state.event_filter_group_index == invalid_index) {
+        filtered_state.list_index = view_state.active_event_index;
         return;
+    }
 
     filtered_state.list_index = invalid_index;
 
@@ -365,6 +367,7 @@ void process_frame(app_state_t* state) {
         create_event(bl_state, new_index);
         update_active_event(state, new_index);
         update_mutable_view_state(state);
+        view_state.apply_edit_focus_on_event = true;
         break;
     }
     case view_action_type_e::EVENT_REMOVE:
