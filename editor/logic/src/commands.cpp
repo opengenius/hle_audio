@@ -15,7 +15,7 @@ std::unique_ptr<cmd_i> group_remove_cmd_t::apply(data_state_t* state) const {
 }
 
 std::unique_ptr<cmd_i> group_update_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = get_group(state, group_index);
+    auto& obj_ptr = get_group_mut(state, group_index);
 
     auto reverse_cmd = std::make_unique<group_update_cmd_t>(group_index, obj_ptr);
     
@@ -25,7 +25,7 @@ std::unique_ptr<cmd_i> group_update_cmd_t::apply(data_state_t* state) const {
 }
 
 std::unique_ptr<cmd_i> group_update_node_cmd_t::apply(data_state_t* state) const {
-    auto& obj_ptr = get_group(state, group_index);
+    auto& obj_ptr = get_group_mut(state, group_index);
 
     // make reverse command
     auto rev_cmd = std::make_unique<group_update_node_cmd_t>(group_index, obj_ptr.node);

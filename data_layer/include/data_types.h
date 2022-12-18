@@ -69,16 +69,16 @@ struct data_state_t {
     std::vector<output_bus_t> output_buses;
 };
 
-static bool is_action_target_group(const rt::action_type_e& action_type) {
-    return action_type != rt::action_type_e::none &&
-        action_type != rt::action_type_e::stop_all &&
-        action_type != rt::action_type_e::stop_bus;
-}
-
 static bool is_action_type_target_bus(const rt::action_type_e& type) {
     return type == rt::action_type_e::stop_bus ||
         type == rt::action_type_e::pause_bus ||
         type == rt::action_type_e::resume_bus;
+}
+
+static bool is_action_target_group(const rt::action_type_e& action_type) {
+    return action_type != rt::action_type_e::none &&
+        action_type != rt::action_type_e::stop_all &&
+        !is_action_type_target_bus(action_type);
 }
 
 static bool is_event_target_group(const event_t& event, size_t group_index) {
@@ -101,7 +101,10 @@ void init(data_state_t* state);
 
 void create_group(data_state_t* state, size_t group_index);
 void remove_group(data_state_t* state, size_t group_index);
-inline named_group_t& get_group(data_state_t* state, size_t group_index) {
+inline const named_group_t& get_group(const data_state_t* state, size_t group_index) {
+    return state->groups[group_index];
+}
+inline named_group_t& get_group_mut(data_state_t* state, size_t group_index) {
     return state->groups[group_index];
 }
 

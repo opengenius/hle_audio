@@ -110,7 +110,8 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
                 changing_value = *repeat_count_ptr;
             }
 
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
+            if (ImGui::IsItemDeactivatedAfterEdit() && 
+                    changing_value != repeat_node.repeat_count) {
                 changing_node = {};
 
                 auto repeat_node_copy = repeat_node;
@@ -304,14 +305,18 @@ static void ClippedListWithAddRemoveButtonsFiltered(size_t elem_count, float sca
 
 static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
                 view_action_type_e& action) {
+    auto& data_group = get_group(&data_state, mut_view_state.active_group_index);
+
     auto& group_state = mut_view_state.selected_group_state;
 
     ImGui_std::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
-    if (ImGui::IsItemDeactivatedAfterEdit()) {
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.name != group_state.name) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
     ImGui::SliderFloat("volume", &group_state.volume, 0.0f, 1.0f);
-    if (ImGui::IsItemDeactivatedAfterEdit()) {
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.volume != group_state.volume) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
@@ -321,7 +326,8 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
             &group_state.cross_fade_time, 
             0.01f,  &f32_zero, nullptr,
             time_sec_format);
-    if (ImGui::IsItemDeactivatedAfterEdit()) {
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.cross_fade_time != group_state.cross_fade_time) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
@@ -365,7 +371,8 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
 
         if (ImGui::BeginPopup("show_bus_popup")) {
             ImGui_std::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
+            if (ImGui::IsItemDeactivatedAfterEdit() &&
+                    mut_view_state.bus_edit_state.name != bus.name) {
                 action = view_action_type_e::BUS_RENAME;
                 ImGui::CloseCurrentPopup();
             }
@@ -605,9 +612,12 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 ImGui::SetKeyboardFocusHere();
             }
 
+            auto& ds_event = data_state.events[mut_view_state.active_event_index];
+
             auto& event_state = mut_view_state.event_state;
             ImGui_std::InputText("name##event_name", nullptr, &event_state.name, ImGuiInputTextFlags_AutoSelectAll);
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
+            if (ImGui::IsItemDeactivatedAfterEdit() &&
+                    event_state.name != ds_event.name) {
                 action = view_action_type_e::EVENT_UPDATE;
             }
 
@@ -663,7 +673,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                         }
                         // group target actions
                         if (is_action_target_group(ev_action.type)) {
-                            if (active_group_index != invalid_index && 
+                            if (active_group_index != invalid_index && // no assign if not active group
+                                active_group_index != ev_action.target_index && // no assign if active group is the same
                                     ImGui::MenuItem("Assign active group")) {
                                 ev_action.target_index = active_group_index;
                                 action = view_action_type_e::EVENT_UPDATE;
@@ -696,8 +707,10 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                         auto data = (void*)&data_state.output_buses;
                         if (ImGui::Combo("output bus", &current_index, 
                                 getter, data, (int)data_state.output_buses.size())) {
-                            ev_action.target_index = current_index;
-                            action = view_action_type_e::EVENT_UPDATE;
+                            if (ev_action.target_index != current_index) {
+                                ev_action.target_index = current_index;
+                                action = view_action_type_e::EVENT_UPDATE;
+                            }
                         }
                     } else if (ev_action.type == rt::action_type_e::none) {
                         ImGui::Text("none");
@@ -717,7 +730,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                             &ev_action.fade_time, 
                             0.01f,  &f32_zero, nullptr,
                             time_sec_format);
-                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    if (ImGui::IsItemDeactivatedAfterEdit() &&
+                            ev_action.fade_time != ds_event.actions[action_index].fade_time) {
                         action = view_action_type_e::EVENT_UPDATE;
                     }
 
