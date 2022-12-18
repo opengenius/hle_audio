@@ -796,6 +796,38 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
 
     ImGui::EndChild(); // right pane
 
+    //
+    // Exit save dialog
+    //
+    if (mut_view_state.show_exit_save_dialog) {
+        mut_view_state.show_exit_save_dialog = false;
+
+        ImGui::OpenPopup("Save?");
+    }
+
+    if (ImGui::BeginPopupModal("Save?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("All those beautiful files will be deleted.\nThis operation cannot be undone!\n\n");
+
+
+        if (ImGui::Button("Save and Close")) { 
+            ImGui::CloseCurrentPopup();
+
+            action = view_action_type_e::SAVE_AND_EXIT;
+        }
+        ImGui::SetItemDefaultFocus();
+        ImGui::SameLine();
+        if (ImGui::Button("Close without Saving")) { 
+            ImGui::CloseCurrentPopup(); 
+            
+            action = view_action_type_e::EXIT;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) { 
+            ImGui::CloseCurrentPopup(); 
+        }
+        ImGui::EndPopup();
+    }
+
 
     // hotkyes
     // todo: unify actions with main menus

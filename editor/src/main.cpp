@@ -87,8 +87,16 @@ int main(int argc, char** argv)
     hle_audio::editor::init_with_data(app_state, json_filename, sounds_path);
 
     // Main loop
-    while (!glfwWindowShouldClose(window))
-    {
+    bool running = true;
+    while (running) {
+        bool should_close = glfwWindowShouldClose(window);
+        if (should_close) {
+            glfwSetWindowShouldClose(window, GLFW_FALSE);
+
+            if (hle_audio::editor::request_exit(app_state))
+                break; // running loop
+        }
+
         glfwPollEvents();
 
         // Start the Dear ImGui frame
@@ -110,7 +118,8 @@ int main(int argc, char** argv)
             // ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus
             ImGui::Begin("main window", nullptr, flags);
 
-            hle_audio::editor::process_frame(app_state);
+            // running = 
+            running = hle_audio::editor::process_frame(app_state);
 
             ImGui::End();
         }

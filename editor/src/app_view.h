@@ -13,6 +13,8 @@ enum class view_action_type_e {
     SAVE,
     UNDO,
     REDO,
+    SAVE_AND_EXIT,
+    EXIT,
 
     GROUP_ADD,
     GROUP_REMOVE,
@@ -75,6 +77,7 @@ struct view_state_t {
     bool focus_selected_group = false;
     bool apply_edit_focus_on_group = false;
     bool apply_edit_focus_on_event = false;
+    bool show_exit_save_dialog = false;
 
     bool has_save = false;
     bool has_undo = false;

@@ -271,7 +271,7 @@ static void fire_event(app_state_t* state) {
     hlea_fire_event(state->runtime_ctx, state->bank, event_name.c_str(), 0u);
 }
 
-void process_frame(app_state_t* state) {
+bool process_frame(app_state_t* state) {
     /**
      *  update runtime
      */
@@ -322,6 +322,8 @@ void process_frame(app_state_t* state) {
 
     const float runtime_fade_time = 0.3f;
 
+    bool keep_running = true;
+
     //
     // modify data state
     //
@@ -339,6 +341,14 @@ void process_frame(app_state_t* state) {
         break;
     case view_action_type_e::REDO:
         perform_redo(state);
+        break;
+
+    case view_action_type_e::SAVE_AND_EXIT: // SAVE + EXIT duplication
+        save_store_json(&bl_state->data_state, state->data_file_path.c_str());
+        keep_running = false;
+        break;
+    case view_action_type_e::EXIT:
+        keep_running = false;
         break;
 
     case view_action_type_e::GROUP_ADD: {
@@ -584,6 +594,18 @@ void process_frame(app_state_t* state) {
     default:
         assert(false && "unhandled action");
         break;
+    }
+
+    return keep_running;
+}
+
+bool request_exit(app_state_t* state) {
+    if (state->view_state.has_save) {
+        state->view_state.show_exit_save_dialog = true;
+
+        return false;
+    } else {
+        return true;
     }
 }
 
