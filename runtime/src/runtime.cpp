@@ -1,6 +1,8 @@
 #include "hlea/runtime.h"
 
+#include <cstring>
 #include <cassert>
+#include <cstdio>
 #include <algorithm>
 #include "miniaudio.h"
 #include "alloc_utils.inl"

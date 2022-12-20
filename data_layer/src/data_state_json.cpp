@@ -1,5 +1,7 @@
 #include "data_types.h"
 
+#include <cmath>
+
 #define RAPIDJSON_HAS_STDSTRING 1
 #include "rapidjson/filewritestream.h"
 #include "rapidjson/prettywriter.h"

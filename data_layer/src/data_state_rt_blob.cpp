@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <string_view>
 #include <cassert>
+#include <cstring>
 #include <algorithm>
 #include "internal/memory_utils.inl"
 

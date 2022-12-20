@@ -148,6 +148,9 @@ static const std::vector<node_desc_t>* get_child_nodes_ptr(const data_state_t* s
         return &state->nodes_random[node_index].nodes;
     case rt::node_type_e::Sequence:
         return &state->nodes_sequence[node_index].nodes;
+    default:
+        // no child nodes
+        break;
     }
     return nullptr;
 }

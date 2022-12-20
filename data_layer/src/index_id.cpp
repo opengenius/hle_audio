@@ -1,5 +1,6 @@
 #include "index_id.h"
 #include <cassert>
+#include <limits>
 
 namespace hle_audio {
 namespace utils {

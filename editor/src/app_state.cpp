@@ -5,6 +5,7 @@
 #include "hlea/runtime.h"
 
 #include <filesystem>
+#include <algorithm>
 #include <cassert>
 
 namespace fs = std::filesystem;

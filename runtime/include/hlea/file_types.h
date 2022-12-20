@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 enum hlea_file_handle_t : intptr_t;
 
 struct hlea_file_ti {
