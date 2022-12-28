@@ -4,8 +4,6 @@ add_library(hlea_editor_logic STATIC
     src/app_logic.cpp
 )
 
-set_property(TARGET hlea_editor_logic PROPERTY CXX_STANDARD 17)
-
 target_include_directories(hlea_editor_logic 
     PUBLIC 
         include

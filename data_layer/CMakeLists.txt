@@ -13,7 +13,7 @@ add_library(hlea_data_layer STATIC
     src/data_state_rt_blob.cpp
 )
 
-set_property(TARGET hlea_data_layer PROPERTY CXX_STANDARD 17)
+target_compile_features(hlea_data_layer PUBLIC cxx_std_17)
 
 target_include_directories(hlea_data_layer 
     PUBLIC 

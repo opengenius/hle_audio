@@ -6,8 +6,6 @@ add_library(hlea_runtime STATIC
     src/file_api_vfs_bridge.cpp
 )
 
-set_property(TARGET hlea_runtime PROPERTY CXX_STANDARD 17)
-
 target_include_directories(hlea_runtime
     PUBLIC 
         include

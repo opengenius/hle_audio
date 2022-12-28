@@ -38,7 +38,5 @@ add_executable(hlea_editor_logic_tests
   test_state.cpp
 )
 
-set_property(TARGET hlea_editor_logic_tests PROPERTY CXX_STANDARD 17)
-
 target_link_libraries(hlea_editor_logic_tests ${LIBS})
 gtest_discover_tests(hlea_editor_logic_tests)

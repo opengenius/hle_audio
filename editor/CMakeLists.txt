@@ -40,8 +40,6 @@ if (MSVC)
                             LINK_FLAGS "/ENTRY:mainCRTStartup")
 endif()
 
-set_property(TARGET hlea_editor PROPERTY CXX_STANDARD 17)
-
 target_link_libraries(hlea_editor 
     glfw imgui
     hlea_editor_logic

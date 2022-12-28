@@ -15,6 +15,7 @@ option(HLEA_BUILD_TOOL "Enable the build of cli app to compile bank binary." ON)
 
 add_library(runtime_data_types INTERFACE)
 target_include_directories(runtime_data_types INTERFACE rt_types)
+target_compile_features(runtime_data_types INTERFACE cxx_std_11)
 
 add_library(common_private INTERFACE)
 target_include_directories(common_private INTERFACE common/include)
