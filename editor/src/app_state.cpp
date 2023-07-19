@@ -263,8 +263,9 @@ static void fire_event(app_state_t* state) {
         state->bank = nullptr;
     }
     if (!state->bank) {
-        auto fb_buffer = save_store_blob_buffer(&state->bl_state.data_state);
-        state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, fb_buffer.data(), fb_buffer.size());
+        // todo: this could take a while (move to async)
+        auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state);
+        state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, bank_buffer.data(), bank_buffer.size());
         state->bank_cmd_index = get_undo_size(&state->bl_state.cmds);
     }
 

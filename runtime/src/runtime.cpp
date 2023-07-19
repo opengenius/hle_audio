@@ -317,7 +317,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
             path = path_buf;
         }
 
-        file_buffer_data_t read_buffer;
+        file_buffer_data_t read_buffer = {};
         ma_result result = read_file(vfs, path, 
                                 ctx->allocator, &read_buffer);
         if (result == MA_SUCCESS) {
@@ -389,29 +389,8 @@ static sound_id_t make_sound(hlea_context_t* ctx,
 }
 
 template<typename T>
-inline memory_layout_t static_type_layout() {
+constexpr memory_layout_t static_type_layout() {
     return {sizeof(T), alignof(T)};
-}
-
-static bool get_state_info(const node_desc_t* node_desc, memory_layout_t* out_layout) {
-    if (node_desc->type == node_type_e::Sequence) {
-        *out_layout = static_type_layout<sequence_rt_state_t>();
-        return true;
-    } else if (node_desc->type == node_type_e::Repeat) {
-        *out_layout = static_type_layout<repeat_rt_state_t>();
-        return true;
-    }
-    return false;
-}
-
-static void init_state(const node_desc_t* node_desc, void* state) {
-    if (node_desc->type == node_type_e::Sequence) {
-        auto s = (sequence_rt_state_t*)state;
-        *s = {};
-    } else if (node_desc->type == node_type_e::Repeat) {
-        auto s = (repeat_rt_state_t*)state;
-        *s = {};
-    }
 }
 
 template<typename T>
@@ -425,63 +404,82 @@ static const named_group_t* bank_get_group(const hlea_event_bank_t* bank, uint32
     return bank_get(bank, bank->static_data->groups, group_index);
 }
 
-static const node_desc_t* next_node(const hlea_event_bank_t* bank, const node_desc_t* node_desc, void* state) {
-    if (node_desc->type == node_type_e::Sequence) {
-        auto s = (sequence_rt_state_t*)state;
-        
-        auto seq_node = bank_get(bank, bank->static_data->nodes_sequence, node_desc->index);
+static node_desc_t sequence_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
+    auto s = (sequence_rt_state_t*)state;
+    
+    auto seq_node = bank_get(bank, bank->static_data->nodes_sequence, node_desc.index);
 
-        auto seq_size = seq_node->nodes.count;
-        if (seq_size <= s->current_index) return nullptr;
+    auto seq_size = seq_node->nodes.count;
+    if (seq_size <= s->current_index) return {};
 
-        auto res = &seq_node->nodes.get(bank->data_buffer_ptr, s->current_index);
+    auto res = seq_node->nodes.get(bank->data_buffer_ptr, s->current_index);
 
-        // update state
-        ++s->current_index;
+    // update state
+    ++s->current_index;
 
-        return res;
-    } else if (node_desc->type == node_type_e::Repeat) {
-        auto s = (repeat_rt_state_t*)state;
-        
-        auto repeat_node = bank_get(bank, bank->static_data->nodes_repeat, node_desc->index);
-
-        if (repeat_node->repeat_count && repeat_node->repeat_count <= s->iteration_counter) return nullptr;
-
-        auto res = &repeat_node->node;
-
-        // update state
-        ++s->iteration_counter;
-
-        return res;
-
-    //
-    // stateless nodes
-    //
-    } else if (node_desc->type == node_type_e::Random) {
-        auto random_node = bank_get(bank, bank->static_data->nodes_random, node_desc->index);
-        int random_index = rand() % random_node->nodes.count;
-        return &random_node->nodes.get(bank->data_buffer_ptr, random_index);
-    }
-
-    return nullptr;
+    return res;
 }
 
-static bool init_and_push_state(node_state_stack_t& stack, const node_desc_t* node_desc) {
-    memory_layout_t layout =  {};
-    if (get_state_info(node_desc, &layout)) {
+static node_desc_t repeat_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
+    auto s = (repeat_rt_state_t*)state;
+        
+    auto repeat_node = bank_get(bank, bank->static_data->nodes_repeat, node_desc.index);
+
+    if (repeat_node->repeat_count && repeat_node->repeat_count <= s->iteration_counter) return {};
+
+    auto res = repeat_node->node;
+
+    // update state
+    ++s->iteration_counter;
+
+    return res;
+}
+
+static node_desc_t random_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* /*state*/) {
+    auto random_node = bank_get(bank, bank->static_data->nodes_random, node_desc.index);
+    int random_index = rand() % random_node->nodes.count;
+    return random_node->nodes.get(bank->data_buffer_ptr, random_index);
+}
+
+struct node_funcs_t {
+    memory_layout_t state_mem_layout;
+
+    node_desc_t (*process_func)(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state);
+};
+
+static const node_funcs_t g_node_handlers[] = {
+    {}, // None
+    {}, // File
+    {{}, random_process_node}, // Random
+    {static_type_layout<sequence_rt_state_t>(), sequence_process_node}, // Sequence
+    {static_type_layout<repeat_rt_state_t>(), repeat_process_node}, // Repeat
+};
+
+static node_desc_t process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
+    auto process_func = g_node_handlers[size_t(node_desc.type)].process_func;
+    if (process_func) {
+        return process_func(bank, node_desc, state);
+    }
+
+    return {};
+}
+
+static bool init_and_push_state(node_state_stack_t& stack, const node_desc_t& node_desc) {
+    memory_layout_t layout = g_node_handlers[size_t(node_desc.type)].state_mem_layout;
+    if (layout.size) {
         push_state(stack, node_desc, layout);
-        init_state(node_desc, stack.top_entry->state_data);
+        // init state memory, (implement init func for something fancy)
 
         return true;
     }
     return false;
 }
 
-static const node_desc_t* next_node_statefull(node_state_stack_t& stack, const hlea_event_bank_t* bank) {
-    const node_desc_t* next_node_desc = nullptr;
-    while (!next_node_desc && stack.top_entry) {
-        next_node_desc = next_node(bank, stack.top_entry->node_desc, stack.top_entry->state_data);
-        if (!next_node_desc) pop_up_state(stack);
+static node_desc_t next_node_statefull(node_state_stack_t& stack, const hlea_event_bank_t* bank) {
+    node_desc_t next_node_desc = {};
+    while (next_node_desc.type == node_type_e::None && !is_empty(stack)) {
+        next_node_desc = process_node(bank, top_node_desc(stack), top_state(stack));
+        if (next_node_desc.type == node_type_e::None) pop_up_state(stack);
     }
 
     return next_node_desc;
@@ -490,33 +488,28 @@ static const node_desc_t* next_node_statefull(node_state_stack_t& stack, const h
 static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     auto group_sdata = bank_get_group(group.bank, group.group_index);
 
-    const node_desc_t* next_node_desc = nullptr;
-    // first run
-    if (!group.state_stack.top_entry) {
-        next_node_desc = &group_sdata->node;
+    node_desc_t next_node_desc = {};
+    
+    if (is_empty(group.state_stack)) {
+        // first run
+        next_node_desc = group_sdata->node;
+    } else {
+        next_node_desc = next_node_statefull(group.state_stack, group.bank);
     }
 
-    while(true) {
-        if (!next_node_desc) {
-            // process state node
-            next_node_desc = next_node_statefull(group.state_stack, group.bank);
-        }
-
-        // no nodes to process, finish
-        if (!next_node_desc) break;
-
+    while(next_node_desc.type != node_type_e::None) {
         // sound node found, interupt traversing, generate sound
-        if (next_node_desc->type == node_type_e::File) {
-            auto file_node = bank_get(group.bank, group.bank->static_data->nodes_file, next_node_desc->index);
+        if (next_node_desc.type == node_type_e::File) {
+            auto file_node = bank_get(group.bank, group.bank->static_data->nodes_file, next_node_desc.index);
             return make_sound(ctx, group.bank, group_sdata->output_bus_index, file_node);
         }
 
         if (init_and_push_state(group.state_stack, next_node_desc)) {
             // use stacked node
-            next_node_desc = nullptr;
+            next_node_desc = next_node_statefull(group.state_stack, group.bank);
         } else {
             // stateless
-            next_node_desc = next_node(group.bank, next_node_desc, nullptr);
+            next_node_desc = process_node(group.bank, next_node_desc, nullptr);
         }
     }
 
@@ -563,7 +556,7 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     group.next_sound_id = invalid_sound_id;
 
     // no state left, leave
-    if (!group.state_stack.top_entry) return;
+    if (is_empty(group.state_stack)) return;
 
     group.next_sound_id = make_next_sound(ctx, group);
     if (group.next_sound_id) {
@@ -585,7 +578,7 @@ static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     group.obj_id = desc->obj_id;
     // todo: use pooled allocator instead of general one
     // todo: control size
-    init(group.state_stack, 256, ctx->allocator);
+    init(group.state_stack, 128, ctx->allocator);
 
     group.sound_id = make_next_sound(ctx, group);
     if (group.sound_id) {

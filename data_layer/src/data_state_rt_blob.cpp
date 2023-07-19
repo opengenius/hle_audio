@@ -97,22 +97,18 @@ static rt::event_t make_event(std::vector<uint8_t>& buf,
 }
 
 static rt::offset_typed_t<rt::store_t> write_store(std::vector<uint8_t>& buf,
-        const std::vector<rt::char_offset_t>& sound_files,
-        const std::vector<rt::file_node_t>& nodes_file,
-        const std::vector<rt::random_node_t>& nodes_random,
-        const std::vector<rt::sequence_node_t>& nodes_sequence,
-        const std::vector<rt::repeat_node_t>& nodes_repeat,
+        const save_context_t& ctx,
         const std::vector<rt::named_group_t>& groups,
         const std::vector<rt::event_t>& events) {
 
     // todo: use char_offset_t instead of indexing into sound_files
 
     rt::store_t store = {};
-    store.sound_files = write(buf, sound_files);
-    store.nodes_file = write(buf, nodes_file);
-    store.nodes_random = write(buf, nodes_random);
-    store.nodes_sequence = write(buf, nodes_sequence);
-    store.nodes_repeat = write(buf, nodes_repeat);
+    store.sound_files = write(buf, ctx.sound_files);
+    store.nodes_file = write(buf, ctx.nodes_file);
+    store.nodes_random = write(buf, ctx.nodes_random);
+    store.nodes_sequence = write(buf, ctx.nodes_sequence);
+    store.nodes_repeat = write(buf, ctx.nodes_repeat);
     store.groups = write(buf, groups);
     store.events = write(buf, events);
 
@@ -251,9 +247,7 @@ static void save_store_blob(const data_state_t* state, std::vector<uint8_t>& buf
     });
 
     auto store_offset = write_store(buf,
-            ctx.sound_files, 
-            ctx.nodes_file, ctx.nodes_random, ctx.nodes_sequence, ctx.nodes_repeat,
-            groups, events);
+            ctx, groups, events);
 
     // write root offset finally
     header.store = store_offset;
