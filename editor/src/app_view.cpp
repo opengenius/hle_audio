@@ -46,7 +46,7 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
         auto& file_node = get_file_node(&state, node_desc.id);
 
         {
-            const char* file_name = file_node.filename.c_str(); //"None";
+            auto file_name = (const char*)file_node.filename.c_str(); //"None";
             
             if (TreeNodeWithRemoveButton(node_index, file_name, &removePressed)) {
                 ImGui::BeginDisabled(view_state.selected_sound_file_index == invalid_index);
@@ -787,7 +787,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         while (clipper.Step())
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 auto& filename = file_list[i];
-                if (ImGui::Selectable(filename.c_str(), mut_view_state.selected_sound_file_index == i))
+                if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
                     mut_view_state.selected_sound_file_index = i;
                 if (mut_view_state.selected_sound_file_index == i) {
                     ImGui::SetItemAllowOverlap();

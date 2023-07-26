@@ -88,7 +88,8 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
     }
     case rt::node_type_e::File: {
         auto& node = get_file_node_mut(state, res.id);
-        node.filename = v["file"].GetString();
+        auto& file_v = v["file"];
+        node.filename = std::u8string(file_v.GetString(), file_v.GetString() + file_v.GetStringLength());
         node.loop = value_get_opt_bool(v, KEY_LOOP);
         node.stream = value_get_opt_bool(v, KEY_STREAM);
 
@@ -207,7 +208,7 @@ static void write_node_rec(Writer& writer,
     case rt::node_type_e::File: {
         auto& file_node = get_file_node(state, desc.id);
         writer.String("file");
-        writer.String(file_node.filename);
+        writer.String((const char*)file_node.filename.c_str(), file_node.filename.length());
 
         if (file_node.loop) {
             writer.String(KEY_LOOP);

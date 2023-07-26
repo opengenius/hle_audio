@@ -219,7 +219,7 @@ void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size
     }
 }
 
-void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::string& filename) {
+void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::u8string& filename) {
     auto node = get_file_node(&state->data_state, node_desc.id);
 
     node.filename = filename;

@@ -16,6 +16,11 @@ struct buffer_t {
     void* ptr;    
 };
 
+struct file_buffer_data_t {
+    void* data;
+    size_t size;
+};
+
 template<typename T>
 struct offset_typed_t {
     offset_t pos;
@@ -42,7 +47,7 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 1;
+static const uint32_t STORE_BLOB_VERSION = 2;
 
 enum class node_type_e : uint8_t {
     None,
@@ -139,6 +144,17 @@ struct event_t {
     array_view_t<action_t> actions;
 };
 
+struct file_data_t {
+    struct meta_t {
+        uint64_t loop_start;
+        uint64_t loop_end;
+        // ? +SampleRate
+    };
+
+    meta_t meta;
+    array_view_t<uint8_t> data_buffer;
+};
+
 struct store_t {
     array_view_t<char_offset_t> sound_files;
     array_view_t<file_node_t> nodes_file;
@@ -148,6 +164,8 @@ struct store_t {
 
     array_view_t<named_group_t> groups;
     array_view_t<event_t> events;
+
+    array_view_t<file_data_t> file_data;
 };
 
 struct root_header_t {

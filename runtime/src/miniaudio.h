@@ -58361,7 +58361,7 @@ static ma_result ma_decoder_internal_on_tell__custom(void* pUserData, ma_int64* 
     return ma_decoder_tell_bytes(pDecoder, pCursor);
 }
 
-
+static ma_result ma_decoder__on_read_memory(ma_decoder* pDecoder, void* pBufferOut, size_t bytesToRead, size_t* pBytesRead);
 static ma_result ma_decoder_init_from_vtable(const ma_decoding_backend_vtable* pVTable, void* pVTableUserData, const ma_decoder_config* pConfig, ma_decoder* pDecoder)
 {
     ma_result result;
@@ -58378,7 +58378,12 @@ static ma_result ma_decoder_init_from_vtable(const ma_decoding_backend_vtable* p
 
     backendConfig = ma_decoding_backend_config_init(pConfig->format, pConfig->seekPointCount);
 
-    result = pVTable->onInit(pVTableUserData, ma_decoder_internal_on_read__custom, ma_decoder_internal_on_seek__custom, ma_decoder_internal_on_tell__custom, pDecoder, &backendConfig, &pDecoder->allocationCallbacks, &pBackend);
+    if (pDecoder->onRead == ma_decoder__on_read_memory && pVTable->onInitMemory) {
+        result = pVTable->onInitMemory(pVTableUserData, pDecoder->data.memory.pData, pDecoder->data.memory.dataSize, &backendConfig, &pDecoder->allocationCallbacks, &pBackend);
+    } else {
+        result = pVTable->onInit(pVTableUserData, ma_decoder_internal_on_read__custom, ma_decoder_internal_on_seek__custom, ma_decoder_internal_on_tell__custom, pDecoder, &backendConfig, &pDecoder->allocationCallbacks, &pBackend);
+    }
+
     if (result != MA_SUCCESS) {
         return result;  /* Failed to initialize the backend from this vtable. */
     }
@@ -60964,7 +60969,7 @@ MA_API ma_result ma_stbvorbis_seek_to_pcm_frame(ma_stbvorbis* pVorbis, ma_uint64
                 }
 
                 result = ma_stbvorbis_read_pcm_frames(pVorbis, buffer, framesToRead, &framesRead);
-                pVorbis->cursor += framesRead;
+                //pVorbis->cursor += framesRead;
 
                 if (result != MA_SUCCESS) {
                     return result;

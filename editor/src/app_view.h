@@ -117,7 +117,7 @@ struct view_state_t {
     size_t event_action_cmd_index;
 
     // sound file list
-    const std::vector<std::string>* sound_files_u8_names_ptr;
+    const std::vector<std::u8string>* sound_files_u8_names_ptr;
     size_t selected_sound_file_index = invalid_index;
 
     std::vector<int> output_bus_volumes;

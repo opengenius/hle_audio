@@ -16,6 +16,8 @@ namespace hle_audio {
 
 template<typename T>
 static rt::array_view_t<T> write(std::vector<uint8_t>& buf, rt::offset_typed_t<T> offset, const T* values, size_t count) {
+    if (!count) return {};
+
     // expect buf data is enough aligned(alignof(T))
     auto buf_ptr = reinterpret_cast<T*>(buf.data() + offset.pos);
     assert(is_aligned(buf_ptr));
@@ -55,6 +57,12 @@ static rt::char_offset_t write(std::vector<uint8_t>& buf, std::string_view str) 
     return write(buf, str.data(), str.size() + 1).elements;
 }
 
+static rt::char_offset_t write(std::vector<uint8_t>& buf, std::u8string_view str) {
+    // this expects c string and copies trailing null as well
+    assert(str.data()[str.size()] == '\0');
+    return write(buf, (const char*)str.data(), str.size() + 1).elements;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
 namespace editor {
@@ -65,8 +73,9 @@ struct save_context_t {
     std::vector<rt::random_node_t> nodes_random;
     std::vector<rt::sequence_node_t> nodes_sequence;
     std::vector<rt::repeat_node_t> nodes_repeat;
+    std::vector<rt::file_data_t> file_data;
 
-    std::unordered_map<std::string_view, uint32_t> sound_files_indices;
+    std::unordered_map<std::u8string_view, uint32_t> sound_files_indices;
 };
 
 static rt::named_group_t make_named_group(std::vector<uint8_t>& buf, 
@@ -111,11 +120,12 @@ static rt::offset_typed_t<rt::store_t> write_store(std::vector<uint8_t>& buf,
     store.nodes_repeat = write(buf, ctx.nodes_repeat);
     store.groups = write(buf, groups);
     store.events = write(buf, events);
+    store.file_data = write(buf, ctx.file_data);
 
     return write_single(buf, store);
 }
 
-static uint32_t cache_filename_index(std::vector<uint8_t>& buf, save_context_t* ctx, std::string_view filename) {
+static uint32_t cache_filename_index(std::vector<uint8_t>& buf, save_context_t* ctx, std::u8string_view filename) {
     auto indices_it = ctx->sound_files_indices.find(filename);
     if (indices_it != ctx->sound_files_indices.end()) {
         return indices_it->second;
@@ -205,7 +215,8 @@ static rt::node_desc_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* 
     return {desc.type, out_index};
 }
 
-static void save_store_blob(const data_state_t* state, std::vector<uint8_t>& buf) {
+std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider) {
+    std::vector<uint8_t> buf;
 
     rt::root_header_t header = {};
     auto store_header_offset = write_single(buf, header);
@@ -246,19 +257,40 @@ static void save_store_blob(const data_state_t* state, std::vector<uint8_t>& buf
             ) < 0;
     });
 
+    if (fdata_provider) {
+        std::vector<bool> file_stream_only;
+        file_stream_only.resize(ctx.sound_files.size(), true);
+        for (const auto& file_node : ctx.nodes_file) {
+            if (!file_node.stream) {
+                file_stream_only[file_node.file_index] = false;
+            }
+        }
+
+
+        uint32_t it_index = 0;
+        for (auto& sound_filename_offset : ctx.sound_files) {
+            auto sound_filename = sound_filename_offset.get_ptr(rt::buffer_t{buf.data()});
+            auto fdata = fdata_provider->get_file_data(sound_filename, it_index);
+
+            rt::file_data_t rt_fd = {};
+            rt_fd.meta = fdata.meta;
+            if (!file_stream_only[it_index]) {
+                rt_fd.data_buffer = write(buf, fdata.content);
+            }
+            ctx.file_data.push_back(rt_fd);
+
+            ++it_index;
+        }
+    }
+
     auto store_offset = write_store(buf,
             ctx, groups, events);
 
     // write root offset finally
     header.store = store_offset;
     write(buf, store_header_offset, &header, 1);
-}
 
-std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state) {
-    std::vector<uint8_t> res;
-    save_store_blob(state, res);
-
-    return res;
+    return buf;
 }
 
 }

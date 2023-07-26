@@ -29,15 +29,9 @@ struct sound_data_t {
     ma_sound      engine_sound;
 };
 
-struct file_buffer_data_t {
-    void* data;
-    size_t size;
-};
-
 struct hlea_event_bank_t {
     buffer_t data_buffer_ptr;
     const hle_audio::rt::store_t* static_data;
-    file_buffer_data_t file_buffers[1]; // todo: merge file buffers with static_data into single bank file
 };
 
 struct sequence_rt_state_t {
@@ -161,67 +155,6 @@ static void release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
     ctx->recycled_sound_indices[ctx->recycled_count++] = sound_index;
 }
 
-static uint32_t scan_uint32(const uint8_t** data_ptr) {
-    uint32_t value;
-    memcpy(&value, *data_ptr, sizeof(value));
-    *data_ptr += sizeof(value);
-    return value;
-}
-
-/**
- * Extracts loop info from smpl subchunk of WAVE riff file
- */
-static bool find_wav_loop_point(const file_buffer_data_t& buffer_data, uint64_t* out_loop_start, uint64_t* out_loop_end) {
-    union tag_t {
-        char ansi[4];
-        uint32_t single;
-    };
-
-    const tag_t RIFF_tag = {'R', 'I', 'F', 'F'};
-    const tag_t WAVE_tag = {'W', 'A', 'V', 'E'};
-    const tag_t smpl_tag = {'s', 'm', 'p', 'l'};
-
-    auto data_ptr = (const uint8_t*)buffer_data.data;
-
-    uint32_t riff_id = scan_uint32(&data_ptr);
-    if (riff_id != RIFF_tag.single) return false;
-
-    // move to format
-    data_ptr += sizeof(uint32_t);
-
-    uint32_t fortat_tag = scan_uint32(&data_ptr);
-    if (fortat_tag != WAVE_tag.single) return false;
-
-    // chunks
-    auto buffer_end_ptr = (const uint8_t*)buffer_data.data + buffer_data.size;
-    while(data_ptr < buffer_end_ptr) {
-        uint32_t chunk_tag = scan_uint32(&data_ptr);
-        uint32_t chunk_size = scan_uint32(&data_ptr);
-
-        if (chunk_tag == smpl_tag.single) {
-            uint32_t loop_count = 0;
-            memcpy(&loop_count, data_ptr + 28, sizeof(loop_count));
-
-            if (loop_count) {
-                uint32_t loop_start, loop_end;
-                memcpy(&loop_start, data_ptr + 44, sizeof(loop_start));
-                memcpy(&loop_end, data_ptr + 48, sizeof(loop_end));
-
-                *out_loop_start = loop_start;
-                *out_loop_end = loop_end;
-                return true;
-            }
-
-            // smpl chunk found, no need to look more
-            break;
-        }
-        
-        data_ptr += chunk_size;
-    }
-
-    return false;
-}
-
 extern "C" ma_uint64 ma_calculate_frame_count_after_resampling(ma_uint32 sampleRateOut, ma_uint32 sampleRateIn, ma_uint64 frameCountIn);
 
 static ma_result read_file(ma_vfs* pVFS, const char* pFilePath, 
@@ -304,6 +237,22 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         return sound_id;
     }
 
+    file_buffer_data_t buffer_data = {};
+    file_data_t::meta_t meta = {};
+    if (bank->static_data->file_data.count) {
+        auto& fd_ref = bank->static_data->file_data.get(buf_ptr, file_node->file_index);
+        meta = fd_ref.meta;
+        if (fd_ref.data_buffer.count) {
+            buffer_data.data = (void*)fd_ref.data_buffer.elements.get_ptr(buf_ptr); // todo: void* cast, but read only here
+            buffer_data.size = fd_ref.data_buffer.count;
+        }
+    } else {
+        // todo: editor data callback
+    }
+
+    if (!buffer_data.data) return invalid_id;
+
+    /*
     auto& buffer_data = bank->file_buffers[file_node->file_index];
     if (!buffer_data.data) {
         ma_vfs* vfs = ctx->engine.pResourceManager->config.pVFS;
@@ -325,6 +274,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         }
     }
     if (!buffer_data.data) return invalid_id;
+    */
 
     sound_data_t* sound;
     auto sound_id = acquire_sound(ctx, &sound);
@@ -365,16 +315,14 @@ static sound_id_t make_sound(hlea_context_t* ctx,
 
     ma_sound_set_looping(&sound->engine_sound, file_node->loop);
 
-    // Extract wav loop point
-    uint64_t loop_start, loop_end;
-    if (find_wav_loop_point(buffer_data, &loop_start, &loop_end)) {
+    if (meta.loop_end) {
         ma_result result;
         ma_uint32 internalSampleRate;
 
         result = ma_data_source_get_data_format(sound->decoder.pBackend, NULL, NULL, &internalSampleRate, NULL, 0);
         if (result == MA_SUCCESS) {
-            loop_start = ma_calculate_frame_count_after_resampling(rm_config.decodedSampleRate, internalSampleRate, loop_start);
-            loop_end = ma_calculate_frame_count_after_resampling(rm_config.decodedSampleRate, internalSampleRate, loop_end);
+            auto loop_start = ma_calculate_frame_count_after_resampling(rm_config.decodedSampleRate, internalSampleRate, meta.loop_start);
+            auto loop_end = ma_calculate_frame_count_after_resampling(rm_config.decodedSampleRate, internalSampleRate, meta.loop_end);
 
             /**
              * Internal decoder loop frames have a slight bias
@@ -855,14 +803,10 @@ static hlea_event_bank_t* load_events_bank_buffer(hlea_context_t* ctx, void* pDa
 
     auto store = data_header->store.get_ptr(buf);
 
-    auto files_size = store->sound_files.count;
-
-    size_t bank_byte_size = offsetof(struct hlea_event_bank_t, file_buffers[files_size]);
-    auto bank = (hlea_event_bank_t*)allocate(ctx->allocator, bank_byte_size, alignof(hlea_event_bank_t));
+    auto bank = allocate<hlea_event_bank_t>(ctx->allocator);
 
     bank->data_buffer_ptr = buf;
     bank->static_data = store;
-    memset(bank->file_buffers, 0, sizeof(file_buffer_data_t) * files_size);
 
     return bank;
 }
@@ -893,12 +837,6 @@ void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank) {
         if (group.next_sound_id) uninit_and_release_sound(ctx, group.next_sound_id);
         group_active_release(ctx, active_index);
         --active_index;
-    }
-
-    // release file buffers
-    auto files_size = bank->static_data->sound_files.count;
-    for (uint32_t i = 0u; i < files_size; ++i) {
-        deallocate(ctx->allocator, bank->file_buffers[i].data);
     }
 
     deallocate(ctx->allocator, bank->data_buffer_ptr.ptr);

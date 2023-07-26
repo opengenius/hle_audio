@@ -28,7 +28,7 @@ void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size
 
 void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type);
 
-void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::string& filename);
+void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::u8string& filename);
 void update_file_node(logic_state_t* state, const node_desc_t& node_desc, const file_node_t& data);
 
 void update_repeat_node(logic_state_t* state, const node_desc_t& node_desc, const node_repeat_t& data);

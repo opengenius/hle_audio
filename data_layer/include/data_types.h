@@ -14,7 +14,7 @@ struct node_desc_t {
 };
 
 struct file_node_t {
-    std::string filename;
+    std::u8string filename;
     bool loop = false;
     bool stream = false;
 };
@@ -159,7 +159,17 @@ static std::vector<node_desc_t>* get_child_nodes_ptr_mut(data_state_t* state, co
     return const_cast<std::vector<node_desc_t>*>(get_child_nodes_ptr(state, node));
 }
 
-std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state);
+struct audio_file_data_t {
+    rt::file_data_t::meta_t meta;
+    std::vector<uint8_t> content;
+};
+
+class audio_file_data_provider_ti {
+public:
+    virtual audio_file_data_t get_file_data(const char* filename, uint32_t file_index) = 0;
+};
+
+std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider);
 
 /**
  * @brief Init data state from Json file

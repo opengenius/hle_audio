@@ -1,6 +1,7 @@
 #include "app_state.h"
 #include "app_logic.h"
 #include "app_view.h"
+#include "file_data_provider.h"
 
 #include "hlea/runtime.h"
 
@@ -22,7 +23,7 @@ struct app_state_t {
 
     // sounds file list
     std::vector<fs::path> sound_files;
-    std::vector<std::string> sound_files_u8_names;
+    std::vector<std::u8string> sound_files_u8_names;
 
     // player context
     hlea_context_t* runtime_ctx;
@@ -264,7 +265,10 @@ static void fire_event(app_state_t* state) {
     }
     if (!state->bank) {
         // todo: this could take a while (move to async)
-        auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state);
+        data::file_data_provider_t fd_prov = {};
+        fd_prov._sounds_path = state->sounds_path.c_str();
+        fd_prov.use_oggs = true;
+        auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state, &fd_prov);
         state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, bank_buffer.data(), bank_buffer.size());
         state->bank_cmd_index = get_undo_size(&state->bl_state.cmds);
     }
@@ -496,7 +500,7 @@ bool process_frame(app_state_t* state) {
     case view_action_type_e::SOUND_PLAY: {
         auto file_index = view_state.selected_sound_file_index;
         auto full_path_str = state->sound_files[file_index].u8string();
-        hlea_play_file(state->runtime_ctx, full_path_str.c_str());
+        hlea_play_file(state->runtime_ctx, (const char*)full_path_str.c_str());
         break;
     }
     case view_action_type_e::SOUND_STOP:
