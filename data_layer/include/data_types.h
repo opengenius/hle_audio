@@ -169,7 +169,7 @@ public:
     virtual audio_file_data_t get_file_data(const char* filename, uint32_t file_index) = 0;
 };
 
-std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider);
+std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider, const char* streaming_filename = nullptr);
 
 /**
  * @brief Init data state from Json file

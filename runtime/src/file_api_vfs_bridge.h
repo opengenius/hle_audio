@@ -1,6 +1,6 @@
 #pragma once
 
-#include "miniaudio.h"
+#include "miniaudio_public.h"
 
 struct hlea_file_ti;
 

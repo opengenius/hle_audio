@@ -16,10 +16,25 @@ struct buffer_t {
     void* ptr;    
 };
 
-struct file_buffer_data_t {
-    void* data;
+struct data_buffer_t {
+    uint8_t* data;
     size_t size;
 };
+
+struct range_t {
+    uint32_t offset;
+    uint32_t size;
+};
+
+static bool is_empty(data_buffer_t buf) {
+    return buf.size == 0;
+}
+
+static data_buffer_t advance(data_buffer_t buf, size_t amount) {
+    buf.data += amount;
+    buf.size -= amount;
+    return buf;
+}
 
 template<typename T>
 struct offset_typed_t {
@@ -47,7 +62,7 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 2;
+static const uint32_t STORE_BLOB_VERSION = 3;
 
 enum class node_type_e : uint8_t {
     None,
@@ -71,8 +86,7 @@ static const char* node_type_name(node_type_e type) {
 
 struct file_node_t {
     uint32_t file_index;
-    bool loop;
-    bool stream;
+    uint8_t loop;
 };
 
 struct node_desc_t {
@@ -148,7 +162,10 @@ struct file_data_t {
     struct meta_t {
         uint64_t loop_start;
         uint64_t loop_end;
-        // ? +SampleRate
+        uint64_t length_in_samples;
+        uint32_t sample_rate;
+        uint8_t  stream; // flag [0|1]
+        uint8_t  channels;
     };
 
     meta_t meta;

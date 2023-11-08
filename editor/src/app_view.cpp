@@ -780,6 +780,17 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         if (ImGui::SmallButton("Refresh")) {
             action = view_action_type_e::REFRESH_SOUND_LIST;
         }
+        ImGui::BeginDisabled(mut_view_state.selected_sound_file_index == invalid_index);
+        if (ImGui::SmallButton("Play")) {
+            action = view_action_type_e::SOUND_PLAY;
+        }
+        if (mut_view_state.has_wav_playing) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Stop")) {
+                action = view_action_type_e::SOUND_STOP;
+            }
+        }
+        ImGui::EndDisabled();
 
         ImGui::BeginChild("Files", ImVec2(wav_list_width, 0), true);
         ImGuiListClipper clipper;
@@ -788,7 +799,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 auto& filename = file_list[i];
                 if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
-                    mut_view_state.selected_sound_file_index = i;
+                    mut_view_state.selected_sound_file_index = i; 
                 if (mut_view_state.selected_sound_file_index == i) {
                     ImGui::SetItemAllowOverlap();
                     ImGui::SameLine();

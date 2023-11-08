@@ -4,13 +4,14 @@
 #include "rt_types.h"
 
 namespace hle_audio {
+namespace rt {
 
 struct state_stack_entry_t {
     static const size_t ENTRY_NODE_COUNT = 4;
 
     state_stack_entry_t* prev;
 
-    hle_audio::rt::node_desc_t node_desc[ENTRY_NODE_COUNT];
+    node_desc_t node_desc[ENTRY_NODE_COUNT];
     void* state_data[ENTRY_NODE_COUNT];
 };
 
@@ -43,4 +44,5 @@ static void* top_state(const node_state_stack_t& stack) {
     return stack._top_entry->state_data[stack.top_entry_size - 1];
 }
 
+}
 }

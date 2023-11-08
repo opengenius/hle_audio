@@ -4,4 +4,5 @@ add_executable(hlea_tool
 
 target_link_libraries(hlea_tool
     hlea_data_layer
+    hlea_tool_rt
 )

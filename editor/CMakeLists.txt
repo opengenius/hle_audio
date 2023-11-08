@@ -43,7 +43,8 @@ endif()
 target_link_libraries(hlea_editor 
     glfw imgui
     hlea_editor_logic
-    hlea_runtime
+    hlea_runtime_editor
+    hlea_tool_rt
 )
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/res DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

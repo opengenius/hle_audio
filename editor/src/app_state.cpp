@@ -4,10 +4,13 @@
 #include "file_data_provider.h"
 
 #include "hlea/runtime.h"
+#include "editor/editor_runtime.h"
 
 #include <filesystem>
 #include <algorithm>
 #include <cassert>
+
+void hlea_bind(hlea_context_t* ctx, hle_audio::rt::editor_runtime_t* editor_rt);
 
 namespace fs = std::filesystem;
 
@@ -27,6 +30,7 @@ struct app_state_t {
 
     // player context
     hlea_context_t* runtime_ctx;
+    rt::editor_runtime_t* editor_runtime;
     hlea_event_bank_t* bank = nullptr;
     size_t bank_cmd_index = 0;
 
@@ -185,9 +189,14 @@ static void refresh_wav_list(app_state_t* state) {
 static void create_context(app_state_t* state) {
     auto& data_state = state->bl_state.data_state;
 
+    state->editor_runtime = rt::create_editor_runtime();
+
     hlea_context_create_info_t ctx_info = {};
     ctx_info.output_bus_count = data_state.output_buses.size();
     state->runtime_ctx = hlea_create(&ctx_info);
+    hlea_bind(state->runtime_ctx, state->editor_runtime);
+    
+    assert(state->runtime_ctx);
 }
 
 static void unload_and_destroy_context(app_state_t* state) {
@@ -195,7 +204,8 @@ static void unload_and_destroy_context(app_state_t* state) {
         hlea_unload_events_bank(state->runtime_ctx, state->bank);
         state->bank = nullptr;
     }
-    hlea_stop_file(state->runtime_ctx);
+    rt::stop_file(state->editor_runtime);
+    rt::destroy(state->editor_runtime);
     hlea_destroy(state->runtime_ctx);
     state->runtime_ctx = nullptr;
 }
@@ -253,7 +263,7 @@ void init_with_data(app_state_t* state, const char* filepath, const char* sound_
 
     create_context(state);
 
-    hlea_set_sounds_path(state->runtime_ctx, state->sounds_path.c_str());
+    rt::set_sounds_path(state->editor_runtime, state->sounds_path.c_str());
 
     update_mutable_view_state(state);
 }
@@ -262,11 +272,14 @@ static void fire_event(app_state_t* state) {
     if (state->bank && state->bank_cmd_index != get_undo_size(&state->bl_state.cmds)) {
         hlea_unload_events_bank(state->runtime_ctx, state->bank);
         state->bank = nullptr;
+
+        // todo: wait for unfinished reads
+        rt::drop_file_cache(state->editor_runtime);
     }
     if (!state->bank) {
         // todo: this could take a while (move to async)
         data::file_data_provider_t fd_prov = {};
-        fd_prov._sounds_path = state->sounds_path.c_str();
+        fd_prov.sounds_path = state->sounds_path.c_str();
         fd_prov.use_oggs = true;
         auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state, &fd_prov);
         state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, bank_buffer.data(), bank_buffer.size());
@@ -281,7 +294,7 @@ bool process_frame(app_state_t* state) {
     /**
      *  update runtime
      */
-    hlea_process_active_groups(state->runtime_ctx);
+    hlea_process_frame(state->runtime_ctx);
     auto group_count = hlea_get_active_groups_count(state->runtime_ctx);
     state->active_group_infos.resize(group_count);
     hlea_get_active_groups_infos(state->runtime_ctx, state->active_group_infos.data(), group_count);
@@ -306,7 +319,7 @@ bool process_frame(app_state_t* state) {
     view_state.has_save = state->save_cmd_index != get_undo_size(&state->bl_state.cmds);
     view_state.has_undo = has_undo(&state->bl_state.cmds);
     view_state.has_redo = has_redo(&state->bl_state.cmds);
-    view_state.has_wav_playing = hlea_is_file_playing(state->runtime_ctx);
+    view_state.has_wav_playing = rt::is_file_playing(state->editor_runtime);
     view_state.sound_files_u8_names_ptr = &state->sound_files_u8_names;
 
     const auto prev_group_index = view_state.active_group_index;
@@ -500,11 +513,11 @@ bool process_frame(app_state_t* state) {
     case view_action_type_e::SOUND_PLAY: {
         auto file_index = view_state.selected_sound_file_index;
         auto full_path_str = state->sound_files[file_index].u8string();
-        hlea_play_file(state->runtime_ctx, (const char*)full_path_str.c_str());
+        rt::play_file(state->editor_runtime, (const char*)full_path_str.c_str());
         break;
     }
     case view_action_type_e::SOUND_STOP:
-        hlea_stop_file(state->runtime_ctx);
+        rt::stop_file(state->editor_runtime);
         break;
     case view_action_type_e::RUNTIME_FIRE_EVENT: {
         fire_event(state);

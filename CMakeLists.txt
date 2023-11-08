@@ -20,6 +20,8 @@ target_compile_features(runtime_data_types INTERFACE cxx_std_11)
 add_library(common_private INTERFACE)
 target_include_directories(common_private INTERFACE common/include)
 
+# miniaudio+vorbis
+add_subdirectory(rt_libs)
 
 # runtime library
 add_subdirectory(runtime)
@@ -27,6 +29,7 @@ add_subdirectory(runtime)
 # data layer
 if (HLEA_BUILD_EDITOR OR HLEA_BUILD_TOOL)
   add_subdirectory(data_layer)
+  add_subdirectory(tool_rt)
 endif()
 
 if (HLEA_BUILD_EDITOR)

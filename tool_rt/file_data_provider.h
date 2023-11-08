@@ -7,7 +7,7 @@ namespace data {
 
 class file_data_provider_t : public hle_audio::editor::audio_file_data_provider_ti {
 public:
-    const char* _sounds_path;
+    const char* sounds_path;
     bool use_oggs = false;
 
     hle_audio::editor::audio_file_data_t get_file_data(const char* filename, uint32_t file_index) override;

@@ -75,6 +75,10 @@ struct save_context_t {
     std::vector<rt::repeat_node_t> nodes_repeat;
     std::vector<rt::file_data_t> file_data;
 
+    struct file_data_t {
+        bool stream;
+    };
+    std::vector<file_data_t> sound_file_data;
     std::unordered_map<std::u8string_view, uint32_t> sound_files_indices;
 };
 
@@ -125,17 +129,29 @@ static rt::offset_typed_t<rt::store_t> write_store(std::vector<uint8_t>& buf,
     return write_single(buf, store);
 }
 
-static uint32_t cache_filename_index(std::vector<uint8_t>& buf, save_context_t* ctx, std::u8string_view filename) {
+static rt::file_node_t cache_file(std::vector<uint8_t>& buf, save_context_t* ctx, const file_node_t& file_node) {
+    std::u8string_view filename = file_node.filename;
+
+    uint32_t index = 0;
+
     auto indices_it = ctx->sound_files_indices.find(filename);
     if (indices_it != ctx->sound_files_indices.end()) {
-        return indices_it->second;
+        ctx->sound_file_data[indices_it->second].stream &= file_node.stream;
+        index = indices_it->second;
+    } else {
+        index = (uint32_t)ctx->sound_files.size();
+        ctx->sound_files_indices[filename] = index;
+        ctx->sound_files.push_back(write(buf, filename));
+        
+        save_context_t::file_data_t fdata = {};
+        fdata.stream = file_node.stream;
+        ctx->sound_file_data.push_back(fdata);
     }
 
-    uint32_t index = (uint32_t)ctx->sound_files.size();
-    ctx->sound_files_indices[filename] = index;
-    ctx->sound_files.push_back(write(buf, filename));
-
-    return index;
+    rt::file_node_t res = {};
+    res.file_index = index;
+    res.loop = file_node.loop;
+    return res;
 }
 
 static rt::node_desc_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx, 
@@ -153,11 +169,7 @@ static rt::node_desc_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* 
 
         out_index = (uint16_t)ctx->nodes_file.size();
 
-        rt::file_node_t node = {};
-        node.file_index = cache_filename_index(buf, ctx, file_node.filename);
-        node.loop = file_node.loop;
-        node.stream = file_node.stream;
-        ctx->nodes_file.push_back(node);
+        ctx->nodes_file.push_back(cache_file(buf, ctx, file_node));
 
         break;
     }
@@ -215,7 +227,7 @@ static rt::node_desc_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* 
     return {desc.type, out_index};
 }
 
-std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider) {
+std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider, const char* streaming_filename) {
     std::vector<uint8_t> buf;
 
     rt::root_header_t header = {};
@@ -258,12 +270,11 @@ std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_fil
     });
 
     if (fdata_provider) {
-        std::vector<bool> file_stream_only;
-        file_stream_only.resize(ctx.sound_files.size(), true);
-        for (const auto& file_node : ctx.nodes_file) {
-            if (!file_node.stream) {
-                file_stream_only[file_node.file_index] = false;
-            }
+
+        FILE* streaming_file = nullptr;
+        if (streaming_filename) {
+            streaming_file = fopen(streaming_filename, "wb");
+            // expect valid?
         }
 
 
@@ -271,15 +282,30 @@ std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_fil
         for (auto& sound_filename_offset : ctx.sound_files) {
             auto sound_filename = sound_filename_offset.get_ptr(rt::buffer_t{buf.data()});
             auto fdata = fdata_provider->get_file_data(sound_filename, it_index);
+            auto stream = ctx.sound_file_data[it_index].stream;
 
             rt::file_data_t rt_fd = {};
             rt_fd.meta = fdata.meta;
-            if (!file_stream_only[it_index]) {
+            rt_fd.meta.stream = stream ? 1 : 0;
+            if (!stream) { 
                 rt_fd.data_buffer = write(buf, fdata.content);
+            } else if (streaming_file) {
+                auto start_offset = ftell(streaming_file);
+                auto written_bytes = fwrite(fdata.content.data(), 1, fdata.content.size(), streaming_file);
+                assert(written_bytes == fdata.content.size());
+
+                rt::array_view_t<uint8_t> buf_range = {};
+                buf_range.count = fdata.content.size();
+                buf_range.elements.pos = start_offset;
+                rt_fd.data_buffer = buf_range;
             }
             ctx.file_data.push_back(rt_fd);
 
             ++it_index;
+        }
+
+        if (streaming_file) {
+            fclose(streaming_file);
         }
     }
 

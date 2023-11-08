@@ -2,6 +2,7 @@
 #include "chunked_stack_allocator.inl"
 
 namespace hle_audio {
+namespace rt {
 
 void init(node_state_stack_t& stack, uint32_t chunk_size, const allocator_t& backing_alloc) {
     init(&stack.alloc, chunk_size, backing_alloc);
@@ -43,4 +44,5 @@ void push_state(node_state_stack_t& stack,
     ++stack.top_entry_size;    
 }
 
+}
 }
