@@ -12,8 +12,6 @@ static const uint16_t SOUNDS_UNUSED_LIST = 0u;
 static const uint8_t MAX_OUPUT_BUSES = 32u;
 static const uint16_t MAX_STREAMING_SOURCES = MAX_SOUNDS;
 
-using sound_index_t = uint16_t;
-
 enum sound_id_t : uint16_t;
 const sound_id_t invalid_sound_id = (sound_id_t)0u;
 
@@ -91,14 +89,15 @@ struct hlea_context_t {
     sound_data_t sounds[MAX_SOUNDS];
     uint16_t sounds_allocated;
     
-    sound_index_t recycled_sound_indices[MAX_SOUNDS];
+    sound_id_t recycled_sounds[MAX_SOUNDS];
     uint16_t recycled_count;
+
+    // todo: use recycled_sounds tail block for pending
+    sound_id_t pending_streaming_sounds[MAX_SOUNDS];
+    uint16_t pending_streaming_sounds_size;
 
     group_data_t active_groups[MAX_ACTIVE_GROUPS];
     uint16_t active_groups_size;
 
     hle_audio::rt::streaming_data_source_t streaming_sources[MAX_STREAMING_SOURCES];
-
-    sound_id_t pending_streaming_sounds[MAX_SOUNDS];
-    uint16_t pending_streaming_sounds_size;
 };

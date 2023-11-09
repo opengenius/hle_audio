@@ -62,15 +62,14 @@ static sound_id_t acquire_sound(hlea_context_t* ctx, sound_data_t** out_sound_pt
     assert(ctx);
     assert(out_sound_ptr);
 
-    sound_index_t sound_index = 0u;
+    sound_id_t sound_id = {};
     if (ctx->recycled_count) {
-        sound_index = ctx->recycled_sound_indices[--ctx->recycled_count];
+        sound_id = ctx->recycled_sounds[--ctx->recycled_count];
     } else {
         if (ctx->sounds_allocated == MAX_SOUNDS) return (sound_id_t)0u;
-        sound_index = ctx->sounds_allocated++;
+        auto sound_index = ctx->sounds_allocated++;
+        sound_id = sound_id_t(sound_index + 1);
     }
-
-    sound_id_t sound_id = (sound_id_t)(sound_index + 1);
 
     sound_data_t* data_ptr = get_sound_data(ctx, sound_id);
 
@@ -85,10 +84,8 @@ static void release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
     assert(ctx);
     assert(sound_id);
 
-    sound_index_t sound_index = sound_id - 1;
-
     assert(ctx->recycled_count < MAX_SOUNDS);
-    ctx->recycled_sound_indices[ctx->recycled_count++] = sound_index;
+    ctx->recycled_sounds[ctx->recycled_count++] = sound_id;
 }
 
 static bank_streaming_source_info_t retrieve_bank_streaming_info(hlea_context_t* ctx, 
