@@ -135,7 +135,7 @@ async_file_handle_t start_async_reading(async_file_reader_t* reader, ma_vfs_file
     } else if (reader->opened_file_count < MAX_OPENED_FILES) {
         file_index = reader->opened_file_count++;
     } else {
-        return {};
+        return invalid_async_file_handle;
     }
 
     async_file_data_t fdata = {};
@@ -146,7 +146,7 @@ async_file_handle_t start_async_reading(async_file_reader_t* reader, ma_vfs_file
 }
 
 void stop_async_reading(async_file_reader_t* reader, async_file_handle_t afile) {
-    // respect queued read requests, wait for all pending reads (too strict now - even from other files)
+    // respect queued read requests, wait for all pending reads (too strict now - wait for reads even from other files)
     // todo: consider non-blocking solution, waiting read per file
     auto wp = async_read_token_t(reader->read_request_indices.write_pos.load());
     while (check_request_running(reader, wp)) {
