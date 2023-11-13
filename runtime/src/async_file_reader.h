@@ -38,7 +38,7 @@ struct async_read_request_t {
 };
 
 async_read_token_t request_read(async_file_reader_t* reader, const async_read_request_t& request);
-bool check_request_running(async_file_reader_t* reader, async_read_token_t token);
+bool check_request_running(const async_file_reader_t* reader, async_read_token_t token);
 
 }
 }

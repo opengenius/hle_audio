@@ -54,7 +54,8 @@ static bool can_read(const ring_indices_u32_t& indices) {
     return indices.read_pos != indices.write_pos;
 }
 
-static bool can_write(ring_indices_u32_t& indices, uint32_t range) {
+// thread-safe
+static bool can_write(const ring_indices_u32_t& indices, uint32_t range) {
     using indices_type = decltype(ring_indices_u32_t::read_pos)::value_type;
     return indices.write_pos.load() != indices_type(indices.read_pos.load() + range);
 }
@@ -145,7 +146,13 @@ async_file_handle_t start_async_reading(async_file_reader_t* reader, ma_vfs_file
 }
 
 void stop_async_reading(async_file_reader_t* reader, async_file_handle_t afile) {
-    // todo: respect queued read requests
+    // respect queued read requests, wait for all pending reads (too strict now - even from other files)
+    // todo: consider non-blocking solution, waiting read per file
+    auto wp = async_read_token_t(reader->read_request_indices.write_pos.load());
+    while (check_request_running(reader, wp)) {
+        std::this_thread::sleep_for(1ms);
+    }
+    
     reader->opened_files_freed[reader->opened_files_freed_count++] = afile;
 }
 
@@ -182,7 +189,7 @@ async_read_token_t request_read(async_file_reader_t* reader, const async_read_re
 }
 
 // thread-safe
-bool check_request_running(async_file_reader_t* reader, async_read_token_t token) {
+bool check_request_running(const async_file_reader_t* reader, async_read_token_t token) {
     auto last_req = reader->read_request_indices.write_pos.load();
     uint32_t tok_dist = last_req - uint32_t(token);
     uint32_t queued_dist = last_req - reader->read_pos_processed;

@@ -25,7 +25,6 @@ extern "C" ma_uint64 ma_calculate_frame_count_after_resampling(ma_uint32 sampleR
 
 /**
  * streaming TODOs:
- *  - ensure async file reading is finished by stop_async_reading / file closing
  *  - implement decoder_ti for wav, ogg, etc
  *      - use asbtract in streaming_data_source_t
  *      - recycle decoders instead of reiniting them
@@ -855,13 +854,15 @@ void hlea_unload_events_bank(hlea_context_t* ctx, hlea_event_bank_t* bank) {
     }
 
     if (bank->streaming_afile) {
-        assert(ctx->pending_streaming_sounds_size == 0);
-        // todo: fence async reading (so pending_streaming_sounds_size == 0 will not be required)
-
+        // safe as all sounds're stopped feeding from the stream
         deregister_source(ctx->streaming_cache, bank->streaming_cache_src);
         bank->streaming_cache_src = {};
+
+        // wait for all reads to finish and stop
         stop_async_reading(ctx->async_io, bank->streaming_afile);
         bank->streaming_afile = {};
+
+        // no more pending reads, close the file
         ma_vfs_close(ctx->pVFS, bank->streaming_file);
         bank->streaming_file = {};
     }
