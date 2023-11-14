@@ -3,45 +3,55 @@
 namespace hle_audio {
 namespace rt {
 
+static const uint16_t HEAD_INDEX = 0u;
+
 struct index_list_entry_t {
     uint16_t prev;
     uint16_t next;
 };
+
 struct index_list_t {
     index_list_entry_t* entries;
-    uint16_t head_index;
 };
 
 static void push_back(index_list_t* list, uint16_t index);
 
-static void init(index_list_t* list, index_list_entry_t* entries, uint16_t head_index) {
+/**
+ * 
+ * @param list 
+ * @param entries should have entries_count + 1 size as zero is used as list head
+ * @param entries_count 
+ */
+static void init(index_list_t* list, index_list_entry_t* entries, uint16_t entries_count) {
     list->entries = entries;
-    list->head_index = head_index;
 
     index_list_entry_t head = {};
-    head.prev = head.next = head_index;
-    entries[head_index] = head;
+    entries[HEAD_INDEX] = head;
 
-    for (uint16_t i = 0; i < head_index; ++i) {
+    for (uint16_t i = 0; i < entries_count; ++i) {
         push_back(list, i);
     }
 }
 
-static void push_back(index_list_t* list, uint16_t index) {
-    auto head = list->entries[list->head_index];
+static void push_back(index_list_t* list, uint16_t in_index) {
+    uint16_t index = in_index + 1;
 
-    assert(list->entries[head.prev].next == list->head_index);
+    auto head = list->entries[HEAD_INDEX];
+
+    assert(list->entries[head.prev].next == HEAD_INDEX);
     list->entries[head.prev].next = index;
 
     index_list_entry_t new_entry = {};
     new_entry.prev = head.prev;
-    new_entry.next = list->head_index;
+    new_entry.next = HEAD_INDEX;
     list->entries[index] = new_entry;
 
-    list->entries[list->head_index].prev = index;
+    list->entries[HEAD_INDEX].prev = index;
 }
 
-static void erase(index_list_t* list, uint16_t index) {
+static void erase(index_list_t* list, uint16_t in_index) {
+    uint16_t index = in_index + 1;
+
     auto cur = list->entries[index];
     assert(list->entries[cur.prev].next == index);
     list->entries[cur.prev].next = cur.next;
@@ -50,13 +60,14 @@ static void erase(index_list_t* list, uint16_t index) {
 }
 
 static uint16_t pop_front(index_list_t* list) {
-    auto head = list->entries[list->head_index];
+    auto head = list->entries[HEAD_INDEX];
     // empty
-    if (head.next == list->head_index) return ~0u;
+    if (head.next == HEAD_INDEX) return ~0u;
 
-    erase(list, head.next);
+    auto res = head.next - 1;
+    erase(list, res);
 
-    return head.next;
+    return res;
 }
 
 }
