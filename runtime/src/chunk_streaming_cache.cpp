@@ -88,9 +88,11 @@ chunk_streaming_cache_t* create_cache(const chunk_streaming_cache_init_info_t& i
     init(&cache->free_chunks, cache->free_chunk_entries, MAX_POOL_CHUNKS);
 
     // expect 0.5 as max load factor, so double chunk count should be enough (MAX_POOL_CHUNKS * 2 hash table slots)
-    init(&cache->chunk_indices, 
-        cache->chunk_indices_storage, &cache->chunk_indices_storage[MAX_POOL_CHUNKS * 2], 
-        MAX_POOL_CHUNKS * 2);
+    auto chunk_indices_size = MAX_POOL_CHUNKS * 2;
+    auto chunk_indices_values_storage = &cache->chunk_indices_storage[chunk_indices_size];
+    hash::init(&cache->chunk_indices, 
+        cache->chunk_indices_storage, chunk_indices_values_storage, 
+        chunk_indices_size);
 
     return cache;
 }
@@ -147,7 +149,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
 
     // try find chunk in cache
     auto req_key_hash = hash_src_pos(request.src, req_src_offset);
-    auto ch_index = find_index(&cache.chunk_indices, req_key_hash, 
+    auto ch_index = hash::find_index(&cache.chunk_indices, req_key_hash, 
             [&request, req_src_offset, &cache](uint32_t index)->bool {
         auto& ch = cache.chunks[index];
         return ch.src == request.src && ch.src_offset == req_src_offset;
@@ -182,7 +184,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     if (ch_ref.src) {
         auto key_hash = hash_src_pos(ch_ref.src, ch_ref.src_offset);
         
-        erase_with_index(&cache.chunk_indices, key_hash, free_index);
+        hash::erase_with_index(&cache.chunk_indices, key_hash, free_index);
     }
 
     chunk_streaming_cache_t::chunk_t new_ch = {};
@@ -207,7 +209,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     new_ch.read_token = request_read(cache.async_io, read_req); // todo: check result
 
     cache.chunks[free_index] = new_ch;
-    insert(&cache.chunk_indices, req_key_hash, free_index);
+    hash::insert(&cache.chunk_indices, req_key_hash, free_index);
 
     res.index = free_index;
     res.data = buffer;
