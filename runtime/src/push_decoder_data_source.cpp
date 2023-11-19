@@ -83,7 +83,7 @@ bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame
         for (size_t i = processed_inputs_count; i < src.input_count; ++i) {
             src.inputs[i - processed_inputs_count] = src.inputs[i];
         }
-        src.input_count -= processed_inputs_count;
+        src.input_count -= uint8_t(processed_inputs_count);
     }
 
     // finished reading file chunk
@@ -116,10 +116,10 @@ bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame
         return false;
     }
 
-    size_t frames_in_bytes = frame_count * sizeof(float) * channels;
+    uint64_t frames_in_bytes = frame_count * sizeof(float) * channels;
 
     uint64_t bytes_consumed = std::min(src.read_buffer.size - src.read_bytes, frames_in_bytes);
-    memcpy(frame_out, (uint8_t*)src.read_buffer.data + src.read_bytes, bytes_consumed);
+    memcpy(frame_out, (uint8_t*)src.read_buffer.data + src.read_bytes, size_t(bytes_consumed));
     src.read_bytes += bytes_consumed;
 
     // request next read buffer
