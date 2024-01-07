@@ -17,8 +17,7 @@ struct mp3_decoder_create_info_t {
 mp3_decoder_t* create_decoder(const mp3_decoder_create_info_t& info);
 void destroy(mp3_decoder_t* dec);
 
-bool is_running(const mp3_decoder_t* dec);
-
+void reset(mp3_decoder_t* dec);
 decoder_t cast_to_decoder(mp3_decoder_t* dec);
 
 }

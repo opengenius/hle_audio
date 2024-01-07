@@ -84,7 +84,21 @@ void destroy(mp3_decoder_t* dec) {
     deallocate(dec->allocator, dec);
 }
 
-bool is_running(const mp3_decoder_t* dec) {
+void reset(mp3_decoder_t* dec) {
+    auto alloc = dec->allocator;
+    auto jobs = dec->jobs_sys;
+
+    // destroy + create witout allocation
+    // todo: fix duplication | use destroy -> create_decoder on upper level, too heavy?
+    dec->~mp3_decoder_t();
+    new(dec) mp3_decoder_t(); // init c++ stuff
+    dec->allocator = alloc;
+    dec->jobs_sys = jobs;
+
+    mp3dec_init(&dec->job_state.mp3d);
+}
+
+static bool is_running(const mp3_decoder_t* dec) {
     return dec->job_state.running;
 }
 
@@ -302,10 +316,16 @@ static data_buffer_t mp3dec_next_output(void* state, const data_buffer_t& curren
     return next_output(dec, current_buf);
 }
 
+static bool mp3dec_is_running(void* state) {
+    auto dec = (mp3_decoder_t*)state;
+    return is_running(dec);
+}
+
 static const decoder_ti g_mp3_decoder_tv = {
     mp3dec_release_consumed_inputs,
     mp3dec_queue_input,
-    mp3dec_next_output
+    mp3dec_next_output,
+    mp3dec_is_running
 };
 
 decoder_t cast_to_decoder(mp3_decoder_t* dec) {

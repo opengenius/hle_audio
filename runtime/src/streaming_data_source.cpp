@@ -1,5 +1,4 @@
 #include "streaming_data_source.h"
-#include "decoder_mp3.h"
 
 namespace hle_audio {
 namespace rt {
@@ -68,56 +67,34 @@ static ma_data_source_vtable g_streaming_data_source_vtable = {
     streaming_data_source_get_length
 };
 
-ma_result streaming_data_source_init(streaming_data_source_t* pDataSource, const streaming_data_source_init_info_t& info) {
+ma_result streaming_data_source_init(streaming_data_source_t* data_source, const streaming_data_source_init_info_t& info) {
     ma_data_source_config baseConfig;
 
     baseConfig = ma_data_source_config_init();
     baseConfig.vtable = &g_streaming_data_source_vtable;
 
-    *pDataSource = {};
-    ma_result result = ma_data_source_init(&baseConfig, &pDataSource->base);
+    *data_source = {};
+    ma_result result = ma_data_source_init(&baseConfig, &data_source->base);
     if (result != MA_SUCCESS) {
         return result;
     }
 
-    // get decoder
-    mp3_decoder_create_info_t dec_init_info = {};
-    dec_init_info.allocator = info.allocator;
-    dec_init_info.jobs = info.jobs;
-    pDataSource->decoder = create_decoder(dec_init_info);
+    init(data_source->decoder_reader, info.decoder_reader_info);
 
-    // init decoder reader
-    push_decoder_data_source_init_info_t push_dec_info = {};
-    push_dec_info.streaming_cache = info.streaming_cache;
-    push_dec_info.input_src = info.input_src;
-    push_dec_info.buffer_block = info.file_range;
-    push_dec_info.decoder = cast_to_decoder(pDataSource->decoder);
-    init(pDataSource->decoder_reader, push_dec_info);
-
-    pDataSource->length_in_samples = info.meta.length_in_samples;
-    pDataSource->channels = info.meta.channels;
-    pDataSource->sample_rate = info.meta.sample_rate;
+    data_source->length_in_samples = info.meta.length_in_samples;
+    data_source->channels = info.meta.channels;
+    data_source->sample_rate = info.meta.sample_rate;
 
     return MA_SUCCESS;
 }
 
-void streaming_data_source_uninit(streaming_data_source_t* pDataSource) {
-    assert(is_ready_to_deinit(pDataSource));
+void streaming_data_source_uninit(streaming_data_source_t* data_source) {    
+    deinit(data_source->decoder_reader);
     
-    deinit(pDataSource->decoder_reader);
-    
-    destroy(pDataSource->decoder);
-    pDataSource->decoder = nullptr;
+    data_source->channels = 0;
 
     // uninitialize the base data source.
-    ma_data_source_uninit(&pDataSource->base);
-}
-
-bool is_ready_to_deinit(streaming_data_source_t* pDataSource) {
-    if (is_running(pDataSource->decoder))
-        return false;
-
-    return true;
+    ma_data_source_uninit(&data_source->base);
 }
 
 }

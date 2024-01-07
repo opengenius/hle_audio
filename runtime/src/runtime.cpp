@@ -14,6 +14,7 @@
 #include "internal_editor_runtime.h"
 #include "internal_types.h"
 #include "chunk_streaming_cache.h"
+#include "decoder_mp3.h"
 
 #include "alloc_utils.inl"
 #include "jobs_utils.inl"
@@ -50,6 +51,8 @@ using hle_audio::rt::streaming_data_source_t;
 using hle_audio::rt::streaming_data_source_init_info_t;
 using hle_audio::rt::range_t;
 using hle_audio::rt::editor_runtime_t;
+using hle_audio::rt::audio_format_type_e;
+using hle_audio::rt::decoder_t;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -115,6 +118,73 @@ static bank_streaming_source_info_t retrieve_bank_streaming_info(hlea_context_t*
     return {};
 }
 
+static streaming_data_source_t* find_unused_streaming_source(hlea_context_t* ctx) {
+    // todo: O(n), use freelist
+    for (auto& src : ctx->streaming_sources) {
+        if (src.channels == 0) {
+            return &src;
+        }
+    }
+
+    return nullptr;
+}
+
+struct decoder_result_t {
+    decoder_t decoder;
+    uint16_t dec_index;
+};
+
+static decoder_result_t acquire_decoder(hlea_context_t* ctx, audio_format_type_e audio_format) {
+    using hle_audio::rt::mp3_decoder_t;
+
+    decoder_result_t res = {};
+
+    // todo: ugly and bulky per type decoder storage
+
+    switch (audio_format) {
+    case audio_format_type_e::mp3: {
+        mp3_decoder_t* mp3_dec = {};
+        if (!ctx->unused_decoders_mp3_indices.empty()) {
+            auto recycled_index = ctx->unused_decoders_mp3_indices.pop_back();
+            mp3_dec = ctx->decoders_mp3.vec[recycled_index];
+            res.dec_index = recycled_index;
+
+            reset(mp3_dec);
+            
+        } else {
+            hle_audio::rt::mp3_decoder_create_info_t dec_init_info = {};
+            dec_init_info.allocator = ctx->allocator;
+            dec_init_info.jobs = ctx->jobs;
+            mp3_dec = create_decoder(dec_init_info);
+
+            res.dec_index = ctx->decoders_mp3.size;
+            ctx->decoders_mp3.push_back(mp3_dec);
+        }
+        res.decoder = cast_to_decoder(mp3_dec);
+
+        break;
+    }
+    default:
+        assert(false && "not supported format");
+        break;
+    }
+
+    return res;
+}
+
+static void release_decoder(hlea_context_t* ctx, audio_format_type_e audio_format, uint16_t dec_index) {
+    switch (audio_format) {
+    case audio_format_type_e::mp3: {
+        ctx->unused_decoders_mp3_indices.push_back(dec_index);
+
+        break;
+    }
+    default:
+        assert(false && "not supported format");
+        break;
+    }
+}
+
 static sound_id_t make_sound(hlea_context_t* ctx, 
         hlea_event_bank_t* bank, uint8_t output_bus_index,
         const hle_audio::rt::file_node_t* file_node) {
@@ -130,17 +200,14 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         ma_engine_get_sample_rate(&ctx->engine));
     decoder_config.allocationCallbacks = make_allocation_callbacks(&ctx->allocator);
 
+    assert(bank->static_data->file_data.count);
+    auto& fd_ref = bank->static_data->file_data.get(buf_ptr, file_node->file_index);
+    file_data_t::meta_t meta = fd_ref.meta;
+
     data_buffer_t buffer_data = {};
-    file_data_t::meta_t meta = {};
-    if (bank->static_data->file_data.count) {
-        auto& fd_ref = bank->static_data->file_data.get(buf_ptr, file_node->file_index);
-        meta = fd_ref.meta;
-        if (fd_ref.data_buffer.count) {
-            buffer_data.data = (uint8_t*)fd_ref.data_buffer.elements.get_ptr(buf_ptr); // todo: void* cast, but read only here
-            buffer_data.size = fd_ref.data_buffer.count;
-        }
-    } else {
-        // todo: editor data callback
+    if (fd_ref.data_buffer.count) {
+        buffer_data.data = (uint8_t*)fd_ref.data_buffer.elements.get_ptr(buf_ptr); // todo: void* cast, but read only here
+        buffer_data.size = fd_ref.data_buffer.count;
     }
 
     sound_data_t* sound = nullptr;
@@ -151,28 +218,25 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     }
 
     if (meta.stream) {
-
-        streaming_data_source_t* str_src = nullptr;
-        for (auto& src : ctx->streaming_sources) {
-            if (src.decoder == nullptr) {
-                str_src = &src;
-                break;
-            }
-        }
-
+        streaming_data_source_t* str_src = find_unused_streaming_source(ctx);
         if (str_src) {
             auto streaming_info = retrieve_bank_streaming_info(ctx, bank, file_node->file_index);
             if (streaming_info.streaming_src) {
+                auto dec_data = acquire_decoder(ctx, meta.coding_format);
+                sound->decoder_internal = dec_data.decoder;
+                sound->coding_format = meta.coding_format;
+                sound->dec_index = dec_data.dec_index;
 
                 streaming_data_source_init_info_t info = {};
-                info.allocator = ctx->allocator;
-                info.streaming_cache = ctx->streaming_cache;
-                info.jobs = ctx->jobs;
+                auto& dec_info = info.decoder_reader_info;
 
-                info.input_src = streaming_info.streaming_src;
-                info.file_range = streaming_info.file_range;
-                info.pConfig = &decoder_config;
+                dec_info.streaming_cache = ctx->streaming_cache;
+                dec_info.input_src = streaming_info.streaming_src;
+                dec_info.buffer_block = streaming_info.file_range;
+                dec_info.decoder = dec_data.decoder;
+
                 info.meta = meta;
+
                 auto result = streaming_data_source_init(str_src, info);
                 if (result == MA_SUCCESS) {
                     sound->str_src = str_src;
@@ -189,7 +253,10 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                         return sound_id;
                     }
 
+                    release_decoder(ctx, meta.coding_format, dec_data.dec_index);
                     streaming_data_source_uninit(str_src);
+                } else {
+                    release_decoder(ctx, meta.coding_format, dec_data.dec_index);
                 }
             }
         }
@@ -212,21 +279,15 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                 ma_sound_set_looping(&sound->engine_sound, file_node->loop);
 
                 if (meta.loop_end) {
-                    ma_result result;
-                    ma_uint32 internalSampleRate;
+                    auto loop_start = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), meta.sample_rate, meta.loop_start);
+                    auto loop_end = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), meta.sample_rate, meta.loop_end);
 
-                    result = ma_data_source_get_data_format(sound->decoder.pBackend, NULL, NULL, &internalSampleRate, NULL, 0);
-                    if (result == MA_SUCCESS) {
-                        auto loop_start = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), internalSampleRate, meta.loop_start);
-                        auto loop_end = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), internalSampleRate, meta.loop_end);
-
-                        /**
-                         * Internal decoder loop frames have a slight bias
-                         * (1 frame at least) because of resampling calculation.
-                         * todo: check if this is a problem
-                         */
-                        ma_data_source_set_loop_point_in_pcm_frames(&sound->decoder, loop_start, loop_end);            
-                    }
+                    /**
+                     * Internal decoder loop frames have a slight bias
+                     * (1 frame at least) because of resampling calculation.
+                     * todo: check if this is a problem
+                     */
+                    ma_data_source_set_loop_point_in_pcm_frames(&sound->decoder, loop_start, loop_end);
                 }
 
                 return sound_id;
@@ -374,39 +435,39 @@ static void start_next_after_current(hlea_context_t* ctx, group_data_t& group) {
 
     auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
     auto sound = &sound_data_ptr->engine_sound;
-    if (!ma_sound_is_looping(sound)) {
-        auto engine_rate = ma_engine_get_sample_rate(&ctx->engine);
+    if (ma_sound_is_looping(sound)) return;
+    
+    auto engine_rate = ma_engine_get_sample_rate(&ctx->engine);
 
-        ma_uint64 cursor, length;
-        ma_sound_get_cursor_in_pcm_frames(sound, &cursor);
-        ma_sound_get_length_in_pcm_frames(sound, &length);
-        ma_uint32 sample_rate;
-        ma_sound_get_data_format(sound, NULL, NULL, &sample_rate, NULL, 0);
+    ma_uint64 cursor, length;
+    ma_sound_get_cursor_in_pcm_frames(sound, &cursor);
+    ma_sound_get_length_in_pcm_frames(sound, &length);
+    ma_uint32 sample_rate;
+    ma_sound_get_data_format(sound, NULL, NULL, &sample_rate, NULL, 0);
 
-        ma_uint64 rest_frames_local_freq = length - cursor;
-        auto rest_frames_time = (double)rest_frames_local_freq / sample_rate;
-        auto rest_frames_pcm = ma_uint64(rest_frames_time * engine_rate);
+    ma_uint64 rest_frames_local_freq = length - cursor;
+    auto rest_frames_time = (double)rest_frames_local_freq / sample_rate;
+    auto rest_frames_pcm = ma_uint64(rest_frames_time * engine_rate);
 
-        auto sound_finished = ma_sound_at_end(sound);
+    auto sound_finished = ma_sound_at_end(sound);
 
-        auto group_data = bank_get_group(group.bank, group.group_index);
+    auto group_data = bank_get_group(group.bank, group.group_index);
 
-        auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time * engine_rate);
+    auto fade_time_pcm = (ma_uint64)(group_data->cross_fade_time * engine_rate);
 
-        auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
-        auto next_sound = &next_sound_data_ptr->engine_sound;
-        if (fade_time_pcm) {
-            ma_sound_set_fade_in_pcm_frames(next_sound, -1, 1, fade_time_pcm);
-        }
-        if (!sound_finished && (group_data->cross_fade_time < rest_frames_time)) {
-            ma_sound_set_start_time_in_pcm_frames(next_sound, ma_engine_get_time(&ctx->engine) + rest_frames_pcm - fade_time_pcm);
-        }
-        ma_sound_set_stop_time_in_pcm_frames(next_sound, (ma_uint64)-1);
-        ma_sound_start(next_sound);
+    auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
+    auto next_sound = &next_sound_data_ptr->engine_sound;
+    if (fade_time_pcm) {
+        ma_sound_set_fade_in_pcm_frames(next_sound, -1, 1, fade_time_pcm);
+    }
+    if (!sound_finished && (group_data->cross_fade_time < rest_frames_time)) {
+        ma_sound_set_start_time_in_pcm_frames(next_sound, ma_engine_get_time(&ctx->engine) + rest_frames_pcm - fade_time_pcm);
+    }
+    ma_sound_set_stop_time_in_pcm_frames(next_sound, (ma_uint64)-1);
+    ma_sound_start(next_sound);
 
-        if (!sound_finished) {
-            group.apply_sound_fade_out = true;
-        }
+    if (!sound_finished) {
+        group.apply_sound_fade_out = true;
     }
 }
 
@@ -417,14 +478,14 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     if (is_empty(group.state_stack)) return;
 
     group.next_sound_id = make_next_sound(ctx, group);
-    if (group.next_sound_id) {
-        auto group_data = bank_get_group(group.bank, group.group_index);
+    if (!group.next_sound_id) return;
+    
+    auto group_data = bank_get_group(group.bank, group.group_index);
 
-        auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
-        ma_sound_set_volume(&next_sound_data_ptr->engine_sound, group_data->volume);
+    auto next_sound_data_ptr = get_sound_data(ctx, group.next_sound_id);
+    ma_sound_set_volume(&next_sound_data_ptr->engine_sound, group_data->volume);
 
-        start_next_after_current(ctx, group);
-    }
+    start_next_after_current(ctx, group);
 }
 
 static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
@@ -625,21 +686,11 @@ static void group_break_loop(hlea_context_t* ctx, const event_desc_t* desc) {
     start_next_after_current(ctx, group);
 }
 
-static void uninit_and_release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
+static void release_sound_data(hlea_context_t* ctx, sound_id_t sound_id) {
     auto sound_data_ptr = get_sound_data(ctx, sound_id);
-    
-    ma_sound_uninit(&sound_data_ptr->engine_sound);
-
-    // defer uninit if streaming source is not ready
-    if(sound_data_ptr->str_src && !is_ready_to_deinit(sound_data_ptr->str_src)) {
-        assert(ctx->pending_streaming_sounds_size < (sizeof(ctx->pending_streaming_sounds) / sizeof(ctx->pending_streaming_sounds[0])));
-        ctx->pending_streaming_sounds[ctx->pending_streaming_sounds_size++] = sound_id;
-        return;
-    }
 
     if(sound_data_ptr->str_src) {
-        // ? release editor source file ?
-        // auto afile = sound_data_ptr->str_src->decoder_reader.input_file;
+        release_decoder(ctx, sound_data_ptr->coding_format, sound_data_ptr->dec_index);
 
         streaming_data_source_uninit(sound_data_ptr->str_src);
         sound_data_ptr->str_src = nullptr;
@@ -648,6 +699,21 @@ static void uninit_and_release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
     }
 
     release_sound(ctx, sound_id);
+}
+
+static void uninit_and_release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
+    auto sound_data_ptr = get_sound_data(ctx, sound_id);
+    
+    ma_sound_uninit(&sound_data_ptr->engine_sound);
+
+    // defer uninit if streaming source is not ready
+    if(sound_data_ptr->str_src && is_running(sound_data_ptr->decoder_internal)) {
+        assert(ctx->pending_streaming_sounds_size < (sizeof(ctx->pending_streaming_sounds) / sizeof(ctx->pending_streaming_sounds[0])));
+        ctx->pending_streaming_sounds[ctx->pending_streaming_sounds_size++] = sound_id;
+        return;
+    }
+
+    release_sound_data(ctx, sound_id);
 }
 
 static void group_active_release(hlea_context_t* ctx, uint32_t active_index) {
@@ -941,14 +1007,11 @@ static void process_pending_streaming_sounds(hlea_context_t* ctx) {
         auto sound_data_ptr = get_sound_data(ctx, sound_id);
 
         assert(sound_data_ptr->str_src);
-        if (is_ready_to_deinit(sound_data_ptr->str_src)) {
+        if (!is_running(sound_data_ptr->decoder_internal)) {
             //
             // finish streaming deinit of uninit_and_release_sound
             //
-            streaming_data_source_uninit(sound_data_ptr->str_src);
-            sound_data_ptr->str_src = nullptr;
-
-            release_sound(ctx, sound_id);
+            release_sound_data(ctx, sound_id);
 
             // swap remove
             ctx->pending_streaming_sounds[i] = ctx->pending_streaming_sounds[--ctx->pending_streaming_sounds_size];

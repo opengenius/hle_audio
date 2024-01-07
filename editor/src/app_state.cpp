@@ -273,7 +273,6 @@ static void fire_event(app_state_t* state) {
         hlea_unload_events_bank(state->runtime_ctx, state->bank);
         state->bank = nullptr;
 
-        // todo: wait for unfinished reads
         rt::drop_file_cache(state->editor_runtime);
     }
     if (!state->bank) {

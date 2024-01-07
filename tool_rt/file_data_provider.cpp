@@ -100,6 +100,13 @@ audio_file_data_t file_data_provider_t::get_file_data(const char* filename, uint
         // got wav loop range, nothing to do here        
     }
 
+    
+    if (full_path.extension() == ".wav") {
+        meta.coding_format = rt::audio_format_type_e::pcm;
+    } else if (full_path.extension() == ".mp3") {
+        meta.coding_format = rt::audio_format_type_e::mp3;
+    }
+
     audio_file_data_t res = {};
     res.content = std::move(file_buf);
 
@@ -108,6 +115,7 @@ audio_file_data_t file_data_provider_t::get_file_data(const char* filename, uint
         ogg_path.replace_extension("ogg");
         auto ogg_file_data = read_file(ogg_path);
         if (ogg_file_data.size()) {
+            meta.coding_format = rt::audio_format_type_e::vorbis;
             res.content = std::move(ogg_file_data);
         }
     }

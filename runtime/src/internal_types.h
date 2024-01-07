@@ -5,6 +5,7 @@
 #include "streaming_data_source.h"
 #include "node_state_stack.h"
 #include "chunk_streaming_cache.h"
+#include "decoder_mp3.h"
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -17,6 +18,10 @@ const sound_id_t invalid_sound_id = (sound_id_t)0u;
 
 struct sound_data_t {
     ma_decoder    decoder;
+    hle_audio::rt::decoder_t decoder_internal;
+    hle_audio::rt::audio_format_type_e coding_format;
+    uint16_t dec_index;
+
     hle_audio::rt::streaming_data_source_t* str_src;
     ma_sound      engine_sound;
 };
@@ -65,6 +70,28 @@ struct event_desc_t {
     float fade_time;
 };
 
+template<typename T, size_t ARRAY_SIZE, typename CountType>
+struct array_with_size_t {
+    static_assert(ARRAY_SIZE <= std::numeric_limits<CountType>::max(), "CountType is not enough to store ARRAY_SIZE");
+
+    T vec[ARRAY_SIZE];
+    CountType size;
+
+    bool empty() const {
+        return size == 0;
+    }
+
+    void push_back(const T& v) {
+        assert(size < ARRAY_SIZE);
+        vec[size++] = v;
+    }
+
+    T pop_back() {
+        assert(0 < size);
+        return vec[--size];
+    }
+};
+
 struct hlea_context_t {
     vfs_bridge_t vfs_impl;
     ma_default_vfs vfs_default;
@@ -85,6 +112,7 @@ struct hlea_context_t {
 
     ma_sound_group output_bus_groups[MAX_OUPUT_BUSES];
     uint8_t output_bus_group_count;
+    static_assert(sizeof(output_bus_group_count) < MAX_OUPUT_BUSES, "");
 
     sound_data_t sounds[MAX_SOUNDS];
     uint16_t sounds_allocated;
@@ -100,4 +128,7 @@ struct hlea_context_t {
     uint16_t active_groups_size;
 
     hle_audio::rt::streaming_data_source_t streaming_sources[MAX_STREAMING_SOURCES];
+
+    array_with_size_t<hle_audio::rt::mp3_decoder_t*, MAX_SOUNDS, uint16_t> decoders_mp3;
+    array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_mp3_indices;
 };

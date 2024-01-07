@@ -62,7 +62,7 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 3;
+static const uint32_t STORE_BLOB_VERSION = 4;
 
 enum class node_type_e : uint8_t {
     None,
@@ -158,14 +158,22 @@ struct event_t {
     array_view_t<action_t> actions;
 };
 
+enum class audio_format_type_e : uint8_t {
+    none,
+    pcm,
+    mp3,
+    vorbis
+};
+
 struct file_data_t {
     struct meta_t {
-        uint64_t loop_start;
-        uint64_t loop_end;
-        uint64_t length_in_samples;
-        uint32_t sample_rate;
-        uint8_t  stream; // flag [0|1]
-        uint8_t  channels;
+        audio_format_type_e coding_format;
+        uint64_t            loop_start;
+        uint64_t            loop_end;
+        uint64_t            length_in_samples;
+        uint32_t            sample_rate;
+        uint8_t             stream; // flag [0|1]
+        uint8_t             channels;
     };
 
     meta_t meta;

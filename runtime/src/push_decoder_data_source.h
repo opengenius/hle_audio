@@ -19,8 +19,6 @@ struct push_decoder_data_source_t {
     decoder_t decoder;
     streaming_source_handle input_src;
     range_t buffer_block;
-    // format
-    uint8_t channels;
 
     // inputs
     input_chunk_t inputs[MAX_DS_INPUTS];

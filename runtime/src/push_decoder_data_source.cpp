@@ -20,6 +20,8 @@ void init(push_decoder_data_source_t& src, const push_decoder_data_source_init_i
 }
 
 void deinit(push_decoder_data_source_t& src) {
+    assert(!is_running(src.decoder) && "decoder should have released its inputs");
+
     for (size_t i = 0; i < src.input_count; ++i) {
         release_chunk(*src.streaming_cache, src.inputs[i].chunk_id);
     }

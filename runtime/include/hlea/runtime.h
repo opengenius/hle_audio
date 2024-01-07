@@ -82,6 +82,7 @@ void hlea_set_bus_volume(hlea_context_t* ctx, uint8_t bus_index, float volume);
  */
 
 size_t hlea_get_active_groups_count(hlea_context_t* ctx);
+
 struct hlea_group_info_t {
     size_t group_index;
     bool paused;
