@@ -93,7 +93,8 @@ bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame
             src.input_count && 
             chunk_status(*src.streaming_cache, src.inputs[src.input_count - 1].chunk_id) == chunk_status_e::READY) {
         // queue ready to decode buffer
-        queue_input(src.decoder, src.chunk_buffer);
+        bool last_chunk = src.input_block_offset + src.chunk_buffer.size == src.buffer_block.size;
+        queue_input(src.decoder, src.chunk_buffer, last_chunk);
 
         src.input_block_offset += src.chunk_buffer.size;
         src.chunk_buffer = {};

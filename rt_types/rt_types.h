@@ -21,6 +21,11 @@ struct data_buffer_t {
     size_t size;
 };
 
+struct const_data_buffer_t {
+    const uint8_t* data;
+    size_t size;
+};
+
 struct range_t {
     uint32_t offset;
     uint32_t size;
@@ -62,7 +67,7 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 4;
+static const uint32_t STORE_BLOB_VERSION = 5;
 
 enum class node_type_e : uint8_t {
     None,
@@ -181,7 +186,6 @@ struct file_data_t {
 };
 
 struct store_t {
-    array_view_t<char_offset_t> sound_files;
     array_view_t<file_node_t> nodes_file;
     array_view_t<random_node_t> nodes_random;
     array_view_t<sequence_node_t> nodes_sequence;

@@ -15,23 +15,17 @@
 #include "internal_types.h"
 #include "chunk_streaming_cache.h"
 #include "decoder_mp3.h"
+#include "decoder_pcm.h"
 
 #include "alloc_utils.inl"
 #include "jobs_utils.inl"
 #include "file_utils.inl"
 #include "allocator_bridge.inl"
 
-// miniaudio.h
-extern "C" ma_uint64 ma_calculate_frame_count_after_resampling(ma_uint32 sampleRateOut, ma_uint32 sampleRateIn, ma_uint64 frameCountIn);
-
 /**
  * streaming TODOs:
- *  - implement decoder_ti for wav, ogg, etc
- *      - use asbtract in streaming_data_source_t
- *      - recycle decoders instead of reiniting them
- *  - use decoder_ti with in-memory buffers (non-streaming data)
- *      - requires seeking for loop range support
- * - remove sound_files from static data (store_t)
+ *  - implement decoder_ti for ogg, etc
+ *  - loop range support with decoder_ti is tricky (async decoding to start position doesn't help to maintain gapless playback)
  */
 
 using hle_audio::rt::node_state_stack_t;
@@ -49,6 +43,8 @@ using hle_audio::rt::async_file_reader_t;
 using hle_audio::rt::async_file_handle_t;
 using hle_audio::rt::streaming_data_source_t;
 using hle_audio::rt::streaming_data_source_init_info_t;
+using hle_audio::rt::buffer_data_source_t;
+using hle_audio::rt::buffer_data_source_init_info_t;
 using hle_audio::rt::range_t;
 using hle_audio::rt::editor_runtime_t;
 using hle_audio::rt::audio_format_type_e;
@@ -110,32 +106,56 @@ static bank_streaming_source_info_t retrieve_bank_streaming_info(hlea_context_t*
 #ifdef HLEA_USE_RT_EDITOR
     else if (ctx->editor_hooks) {
         // editor path, per file reading
-        const char* path = bank->static_data->sound_files.get(buf_ptr, file_index).get_ptr(buf_ptr);
-        return retrieve_streaming_info(ctx->editor_hooks, path, file_index);
+        return retrieve_streaming_info(ctx->editor_hooks, file_index);
     }
 #endif
 
     return {};
 }
 
-static streaming_data_source_t* find_unused_streaming_source(hlea_context_t* ctx) {
-    // todo: O(n), use freelist
-    for (auto& src : ctx->streaming_sources) {
-        if (src.channels == 0) {
-            return &src;
-        }
+static streaming_data_source_t* acquire_streaming_data_source(hlea_context_t* ctx) {
+    if (!ctx->unused_streaming_sources_indices.empty()) {
+        auto source_index = ctx->unused_streaming_sources_indices.pop_back();
+        return &ctx->streaming_sources.vec[source_index];
+    } else if (!ctx->streaming_sources.is_full()) {
+        ctx->streaming_sources.push_back({});
+        return &ctx->streaming_sources.last();
     }
 
     return nullptr;
 }
 
+static void release_streaming_data_source(hlea_context_t* ctx, streaming_data_source_t* src) {
+    auto index = src - ctx->streaming_sources.vec;
+    ctx->unused_streaming_sources_indices.push_back(index);
+}
+
+static buffer_data_source_t* acquire_buffer_data_source(hlea_context_t* ctx) {
+    if (!ctx->unused_buffer_sources_indices.empty()) {
+        auto buffer_source_index = ctx->unused_buffer_sources_indices.pop_back();
+        return &ctx->buffer_sources.vec[buffer_source_index];
+    } else if (!ctx->buffer_sources.is_full()) {
+        ctx->buffer_sources.push_back({});
+        return &ctx->buffer_sources.last();
+    }
+
+    return nullptr;
+}
+
+static void release_buffer_data_source(hlea_context_t* ctx, buffer_data_source_t* src) {
+    auto index = src - ctx->buffer_sources.vec;
+    ctx->unused_buffer_sources_indices.push_back(index);
+}
+
 struct decoder_result_t {
+    ma_format format;
     decoder_t decoder;
     uint16_t dec_index;
 };
 
 static decoder_result_t acquire_decoder(hlea_context_t* ctx, audio_format_type_e audio_format) {
     using hle_audio::rt::mp3_decoder_t;
+    using hle_audio::rt::pcm_decoder_t;
 
     decoder_result_t res = {};
 
@@ -161,6 +181,30 @@ static decoder_result_t acquire_decoder(hlea_context_t* ctx, audio_format_type_e
             ctx->decoders_mp3.push_back(mp3_dec);
         }
         res.decoder = cast_to_decoder(mp3_dec);
+        res.format = ma_format_f32;
+
+        break;
+    }
+    case audio_format_type_e::pcm: {
+        pcm_decoder_t* dec_inst = {};
+        if (!ctx->unused_decoders_pcm_indices.empty()) {
+            auto recycled_index = ctx->unused_decoders_pcm_indices.pop_back();
+            dec_inst = ctx->decoders_pcm.vec[recycled_index];
+            res.dec_index = recycled_index;
+
+            reset(dec_inst);
+            
+        } else {
+            hle_audio::rt::pcm_decoder_create_info_t dec_init_info = {};
+            dec_init_info.allocator = ctx->allocator;
+            // dec_init_info.jobs = ctx->jobs;
+            dec_inst = create_decoder(dec_init_info);
+
+            res.dec_index = ctx->decoders_pcm.size;
+            ctx->decoders_pcm.push_back(dec_inst);
+        }
+        res.decoder = cast_to_decoder(dec_inst);
+        res.format = ma_format_s16;
 
         break;
     }
@@ -179,6 +223,11 @@ static void release_decoder(hlea_context_t* ctx, audio_format_type_e audio_forma
 
         break;
     }
+    case audio_format_type_e::pcm: {
+        ctx->unused_decoders_pcm_indices.push_back(dec_index);
+
+        break;
+    }
     default:
         assert(false && "not supported format");
         break;
@@ -193,12 +242,6 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     const ma_uint32 sound_flags = MA_SOUND_FLAG_NO_SPATIALIZATION;
 
     auto buf_ptr = bank->data_buffer_ptr;
-
-    ma_decoder_config decoder_config = ma_decoder_config_init(
-        ma_format_f32, 
-        0, 
-        ma_engine_get_sample_rate(&ctx->engine));
-    decoder_config.allocationCallbacks = make_allocation_callbacks(&ctx->allocator);
 
     assert(bank->static_data->file_data.count);
     auto& fd_ref = bank->static_data->file_data.get(buf_ptr, file_node->file_index);
@@ -217,16 +260,16 @@ static sound_id_t make_sound(hlea_context_t* ctx,
         return invalid_id;
     }
 
+    auto dec_data = acquire_decoder(ctx, meta.coding_format);
+    sound->decoder = dec_data.decoder;
+    sound->coding_format = meta.coding_format;
+    sound->dec_index = dec_data.dec_index;
+
     if (meta.stream) {
-        streaming_data_source_t* str_src = find_unused_streaming_source(ctx);
+        streaming_data_source_t* str_src = acquire_streaming_data_source(ctx);
         if (str_src) {
             auto streaming_info = retrieve_bank_streaming_info(ctx, bank, file_node->file_index);
             if (streaming_info.streaming_src) {
-                auto dec_data = acquire_decoder(ctx, meta.coding_format);
-                sound->decoder_internal = dec_data.decoder;
-                sound->coding_format = meta.coding_format;
-                sound->dec_index = dec_data.dec_index;
-
                 streaming_data_source_init_info_t info = {};
                 auto& dec_info = info.decoder_reader_info;
 
@@ -253,49 +296,53 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                         return sound_id;
                     }
 
-                    release_decoder(ctx, meta.coding_format, dec_data.dec_index);
-                    streaming_data_source_uninit(str_src);
-                } else {
-                    release_decoder(ctx, meta.coding_format, dec_data.dec_index);
+                    streaming_data_source_uninit(str_src);   
                 }
             }
+            release_streaming_data_source(ctx, str_src);
         }
 
     //
     // non-stream path
     //
     } else if (buffer_data.data) {
-        // Init decoder
-        auto result = ma_decoder_init_memory(buffer_data.data, buffer_data.size, &decoder_config, &sound->decoder);
-        if (result == MA_SUCCESS) {
-            // Init sound
-            result = ma_sound_init_from_data_source(&ctx->engine, 
-                    &sound->decoder,
-                    sound_flags, 
-                    &ctx->output_bus_groups[output_bus_index], 
-                    &sound->engine_sound);
 
+        auto src = acquire_buffer_data_source(ctx);
+        if (src) {
+            buffer_data_source_init_info_t info = {};
+            info.decoder = dec_data.decoder;
+            info.format = dec_data.format;
+            info.meta = meta;
+            info.buffer = buffer_data;
+            auto result = buffer_data_source_init(src, info);
             if (result == MA_SUCCESS) {
-                ma_sound_set_looping(&sound->engine_sound, file_node->loop);
+                sound->buffer_src = src;
 
+                // setup loop point
                 if (meta.loop_end) {
-                    auto loop_start = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), meta.sample_rate, meta.loop_start);
-                    auto loop_end = ma_calculate_frame_count_after_resampling(ma_engine_get_sample_rate(&ctx->engine), meta.sample_rate, meta.loop_end);
-
-                    /**
-                     * Internal decoder loop frames have a slight bias
-                     * (1 frame at least) because of resampling calculation.
-                     * todo: check if this is a problem
-                     */
-                    ma_data_source_set_loop_point_in_pcm_frames(&sound->decoder, loop_start, loop_end);
+                    ma_data_source_set_loop_point_in_pcm_frames(src, meta.loop_start, meta.loop_end);
                 }
 
-                return sound_id;
+                // Init sound
+                result = ma_sound_init_from_data_source(&ctx->engine, 
+                        src,
+                        sound_flags, 
+                        &ctx->output_bus_groups[output_bus_index], 
+                        &sound->engine_sound);
+                if (result == MA_SUCCESS) {
+                    ma_sound_set_looping(&sound->engine_sound, file_node->loop);
+                
+                    return sound_id;
+                }
+
+                buffer_data_source_uninit(src);
             }
 
-            ma_decoder_uninit(&sound->decoder);
+            release_buffer_data_source(ctx, src);
         }
     }
+
+    release_decoder(ctx, meta.coding_format, dec_data.dec_index);
 
     release_sound(ctx, sound_id);
     return invalid_id;
@@ -690,13 +737,17 @@ static void release_sound_data(hlea_context_t* ctx, sound_id_t sound_id) {
     auto sound_data_ptr = get_sound_data(ctx, sound_id);
 
     if(sound_data_ptr->str_src) {
-        release_decoder(ctx, sound_data_ptr->coding_format, sound_data_ptr->dec_index);
-
         streaming_data_source_uninit(sound_data_ptr->str_src);
+        release_streaming_data_source(ctx, sound_data_ptr->str_src);
         sound_data_ptr->str_src = nullptr;
-    } else {
-        ma_decoder_uninit(&sound_data_ptr->decoder);
+
+    } else if (sound_data_ptr->buffer_src) {
+        buffer_data_source_uninit(sound_data_ptr->buffer_src);
+        release_buffer_data_source(ctx, sound_data_ptr->buffer_src);
+        sound_data_ptr->buffer_src = nullptr;
     }
+
+    release_decoder(ctx, sound_data_ptr->coding_format, sound_data_ptr->dec_index);
 
     release_sound(ctx, sound_id);
 }
@@ -706,10 +757,10 @@ static void uninit_and_release_sound(hlea_context_t* ctx, sound_id_t sound_id) {
     
     ma_sound_uninit(&sound_data_ptr->engine_sound);
 
-    // defer uninit if streaming source is not ready
-    if(sound_data_ptr->str_src && is_running(sound_data_ptr->decoder_internal)) {
-        assert(ctx->pending_streaming_sounds_size < (sizeof(ctx->pending_streaming_sounds) / sizeof(ctx->pending_streaming_sounds[0])));
-        ctx->pending_streaming_sounds[ctx->pending_streaming_sounds_size++] = sound_id;
+    // defer uninit if decoder is not finished
+    if(is_running(sound_data_ptr->decoder)) {
+        assert(ctx->pending_sounds_size < (sizeof(ctx->pending_sounds) / sizeof(ctx->pending_sounds[0])));
+        ctx->pending_sounds[ctx->pending_sounds_size++] = sound_id;
         return;
     }
 
@@ -1000,21 +1051,20 @@ void hlea_process_active_groups(hlea_context_t* ctx) {
     }
 }
 
-static void process_pending_streaming_sounds(hlea_context_t* ctx) {
-    for (size_t i = 0; i < ctx->pending_streaming_sounds_size; ++i) {
-        auto sound_id = ctx->pending_streaming_sounds[i];
+static void process_pending_sounds(hlea_context_t* ctx) {
+    for (size_t i = 0; i < ctx->pending_sounds_size; ++i) {
+        auto sound_id = ctx->pending_sounds[i];
 
         auto sound_data_ptr = get_sound_data(ctx, sound_id);
 
-        assert(sound_data_ptr->str_src);
-        if (!is_running(sound_data_ptr->decoder_internal)) {
+        if (!is_running(sound_data_ptr->decoder)) {
             //
-            // finish streaming deinit of uninit_and_release_sound
+            // finish deinit of uninit_and_release_sound
             //
             release_sound_data(ctx, sound_id);
 
             // swap remove
-            ctx->pending_streaming_sounds[i] = ctx->pending_streaming_sounds[--ctx->pending_streaming_sounds_size];
+            ctx->pending_sounds[i] = ctx->pending_sounds[--ctx->pending_sounds_size];
             --i;
         }
     }
@@ -1022,7 +1072,7 @@ static void process_pending_streaming_sounds(hlea_context_t* ctx) {
 
 void hlea_process_frame(hlea_context_t* ctx) {
     hlea_process_active_groups(ctx);
-    process_pending_streaming_sounds(ctx);
+    process_pending_sounds(ctx);
 }
 
 static void fire_event(hlea_context_t* ctx, hlea_action_type_e event_type, const event_desc_t* desc) {

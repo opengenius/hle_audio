@@ -10,10 +10,12 @@ set(RUNTIME_SRC
     src/default_allocator.cpp
     src/file_api_vfs_bridge.cpp
     src/decoder_mp3.cpp
+    src/decoder_pcm.cpp
     src/async_file_reader.cpp
     src/push_decoder_data_source.cpp
     src/streaming_data_source.cpp
     src/chunk_streaming_cache.cpp
+    src/buffer_data_source.cpp
 )
 
 add_library(hlea_runtime_common STATIC

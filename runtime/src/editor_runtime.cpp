@@ -4,6 +4,7 @@
 #include "miniaudio_public.h"
 
 #include <unordered_map>
+#include <string>
 #include "file_utils.inl"
 
 namespace hle_audio {
@@ -28,6 +29,12 @@ struct editor_runtime_t {
         bank_streaming_source_info_t streaming_info;
     };
     std::unordered_map<uint32_t, cache_record_t> streaming_file_cache;
+
+    struct file_data_record_t {
+        std::string file_path;
+        rt::range_t data_chunk_range;
+    };
+    std::vector<file_data_record_t> file_data_cache;
 };
 
 editor_runtime_t* create_editor_runtime() {
@@ -44,6 +51,17 @@ void bind(editor_runtime_t* editor_rt, const runtime_env_t* env) {
     editor_rt->env = *env;
 }
 
+void cache_audio_file_data(editor_runtime_t* rt, const char* path, uint32_t file_index, rt::range_t data_chunk_range) {
+    if (rt->file_data_cache.size() <= file_index) {
+        rt->file_data_cache.resize(file_index + 1);
+    }
+
+    editor_runtime_t::file_data_record_t fd_rec = {};
+    fd_rec.file_path = path;
+    fd_rec.data_chunk_range = data_chunk_range;
+    rt->file_data_cache[file_index] = fd_rec;
+}
+
 void drop_file_cache(editor_runtime_t* rt) {
     for (auto it : rt->streaming_file_cache) {
         deregister_source(rt->env.cache, it.second.streaming_info.streaming_src);
@@ -51,17 +69,20 @@ void drop_file_cache(editor_runtime_t* rt) {
         ma_vfs_close(rt->env.pVFS, it.second.file);
     }
     rt->streaming_file_cache.clear();
+    rt->file_data_cache.clear();
 }
 
-bank_streaming_source_info_t retrieve_streaming_info(editor_runtime_t* editor_rt, const char* path, uint32_t file_index) {
-    //  = bank->static_data->sound_files.get(buf_ptr, file_index).get_ptr(buf_ptr);
-
+bank_streaming_source_info_t retrieve_streaming_info(editor_runtime_t* editor_rt, uint32_t file_index) {
     // try opened
     auto it = editor_rt->streaming_file_cache.find(file_index);
     if (it != editor_rt->streaming_file_cache.end()) {
         ++it->second.use_count;
         return it->second.streaming_info;
     }
+
+    auto& fd_rec = editor_rt->file_data_cache[file_index];
+
+    const char* path = fd_rec.file_path.c_str();
 
     char path_buf[512];
     if (editor_rt->sounds_path) {
@@ -75,35 +96,30 @@ bank_streaming_source_info_t retrieve_streaming_info(editor_runtime_t* editor_rt
     ma_vfs_file file;
     auto result = ma_vfs_open(vfs, path, MA_OPEN_MODE_READ, &file);
     if (result == MA_SUCCESS) {
+        auto afile = start_async_reading(editor_rt->env.async_io, file);
+        // todo: handle error
+        assert(afile);
 
-        ma_file_info file_info;
-        result = ma_vfs_info(vfs, file, &file_info);
-        if (result == MA_SUCCESS) {
+        auto str_src = register_source(editor_rt->env.cache, afile);
+        // todo: handle error
+        assert(str_src);
 
-            range_t file_range = {};
-            file_range.size = file_info.sizeInBytes;
+        bank_streaming_source_info_t res = {};
+        res.streaming_src = str_src;
+        res.file_range = fd_rec.data_chunk_range;
 
-            // todo: handle error         
-            auto afile = start_async_reading(editor_rt->env.async_io, file);
-            assert(afile);
+        editor_runtime_t::cache_record_t cache_file = {};
+        cache_file.use_count = 1;
+        cache_file.file = file;
+        cache_file.afile = afile;
+        cache_file.streaming_info = res;
 
-            auto str_src = register_source(editor_rt->env.cache, afile);
+        editor_rt->streaming_file_cache[file_index] = cache_file;
 
-            bank_streaming_source_info_t res = {};
-            res.streaming_src = str_src;
-            res.file_range = file_range;
+        return res;
 
-            editor_runtime_t::cache_record_t cache_file = {};
-            cache_file.use_count = 1;
-            cache_file.file = file;
-            cache_file.afile = afile;
-            cache_file.streaming_info = res;
-
-            editor_rt->streaming_file_cache[file_index] = cache_file;
-
-            return res;
-        }
-        ma_vfs_close(vfs, file);
+        // todo: enable on error handling
+        // ma_vfs_close(vfs, file);
     }
 
     return {};

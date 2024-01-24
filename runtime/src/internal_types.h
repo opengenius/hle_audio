@@ -3,9 +3,11 @@
 #include <cstdint>
 #include "rt_types.h"
 #include "streaming_data_source.h"
+#include "buffer_data_source.h"
 #include "node_state_stack.h"
 #include "chunk_streaming_cache.h"
 #include "decoder_mp3.h"
+#include "decoder_pcm.h"
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -17,12 +19,17 @@ enum sound_id_t : uint16_t;
 const sound_id_t invalid_sound_id = (sound_id_t)0u;
 
 struct sound_data_t {
-    ma_decoder    decoder;
-    hle_audio::rt::decoder_t decoder_internal;
-    hle_audio::rt::audio_format_type_e coding_format;
+    using decoder_t = hle_audio::rt::decoder_t;
+    using audio_format_type_e = hle_audio::rt::audio_format_type_e;
+    using streaming_data_source_t = hle_audio::rt::streaming_data_source_t;
+    using buffer_data_source_t = hle_audio::rt::buffer_data_source_t;
+
+    decoder_t decoder;
+    audio_format_type_e coding_format;
     uint16_t dec_index;
 
-    hle_audio::rt::streaming_data_source_t* str_src;
+    streaming_data_source_t* str_src;
+    buffer_data_source_t* buffer_src;
     ma_sound      engine_sound;
 };
 
@@ -77,6 +84,10 @@ struct array_with_size_t {
     T vec[ARRAY_SIZE];
     CountType size;
 
+    bool is_full() const {
+        return size == ARRAY_SIZE;
+    }
+
     bool empty() const {
         return size == 0;
     }
@@ -86,6 +97,11 @@ struct array_with_size_t {
         vec[size++] = v;
     }
 
+    T& last() {
+        assert(size);
+        return vec[size - 1];
+    }
+
     T pop_back() {
         assert(0 < size);
         return vec[--size];
@@ -93,6 +109,9 @@ struct array_with_size_t {
 };
 
 struct hlea_context_t {
+    using streaming_data_source_t = hle_audio::rt::streaming_data_source_t;
+    using buffer_data_source_t = hle_audio::rt::buffer_data_source_t;
+
     vfs_bridge_t vfs_impl;
     ma_default_vfs vfs_default;
 
@@ -121,14 +140,21 @@ struct hlea_context_t {
     uint16_t recycled_count;
 
     // todo: use recycled_sounds tail block for pending
-    sound_id_t pending_streaming_sounds[MAX_SOUNDS];
-    uint16_t pending_streaming_sounds_size;
+    sound_id_t pending_sounds[MAX_SOUNDS];
+    uint16_t pending_sounds_size;
 
     group_data_t active_groups[MAX_ACTIVE_GROUPS];
     uint16_t active_groups_size;
 
-    hle_audio::rt::streaming_data_source_t streaming_sources[MAX_STREAMING_SOURCES];
+    array_with_size_t<streaming_data_source_t, MAX_STREAMING_SOURCES, uint16_t> streaming_sources;
+    array_with_size_t<uint16_t, MAX_STREAMING_SOURCES, uint16_t> unused_streaming_sources_indices;
+
+    array_with_size_t<buffer_data_source_t, MAX_SOUNDS, uint16_t> buffer_sources;
+    array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_buffer_sources_indices;
 
     array_with_size_t<hle_audio::rt::mp3_decoder_t*, MAX_SOUNDS, uint16_t> decoders_mp3;
     array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_mp3_indices;
+
+    array_with_size_t<hle_audio::rt::pcm_decoder_t*, MAX_SOUNDS, uint16_t> decoders_pcm;
+    array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_pcm_indices;
 };

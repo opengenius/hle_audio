@@ -5,10 +5,10 @@
 
 struct ma_engine;
 
-using hle_audio::rt::streaming_source_handle;
-using hle_audio::rt::range_t;
-
 struct bank_streaming_source_info_t {
+    using streaming_source_handle = hle_audio::rt::streaming_source_handle;
+    using range_t = hle_audio::rt::range_t;
+    
     streaming_source_handle streaming_src;
     range_t file_range;
 };
@@ -27,7 +27,7 @@ struct runtime_env_t {
 };
 void bind(editor_runtime_t* editor_rt, const runtime_env_t* env);
 
-bank_streaming_source_info_t retrieve_streaming_info(editor_runtime_t* editor_rt, const char* path, uint32_t file_index);
+bank_streaming_source_info_t retrieve_streaming_info(editor_runtime_t* editor_rt, uint32_t file_index);
 
 }
 }

@@ -162,6 +162,7 @@ static std::vector<node_desc_t>* get_child_nodes_ptr_mut(data_state_t* state, co
 struct audio_file_data_t {
     rt::file_data_t::meta_t meta;
     std::vector<uint8_t> content;
+    rt::range_t data_chunk_range;
 };
 
 class audio_file_data_provider_ti {

@@ -3,12 +3,8 @@
 #include "miniaudio_public.h"
 #include "push_decoder_data_source.h"
 
-struct hlea_context_t;
-
 namespace hle_audio {
 namespace rt {
-
-struct mp3_decoder_t;
 
 struct streaming_data_source_t {
     ma_data_source_base base;

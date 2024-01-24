@@ -268,6 +268,20 @@ void init_with_data(app_state_t* state, const char* filepath, const char* sound_
     update_mutable_view_state(state);
 }
 
+class editor_file_data_provider_wrapper_t : public hle_audio::editor::audio_file_data_provider_ti {
+public:
+    rt::editor_runtime_t* editor_rt;
+    data::file_data_provider_t fd_prov = {};
+
+    audio_file_data_t get_file_data(const char* filename, uint32_t file_index) override {
+        auto res = fd_prov.get_file_data(filename, file_index);
+
+        cache_audio_file_data(editor_rt, filename, file_index, res.data_chunk_range);
+
+        return res;
+    }
+};
+
 static void fire_event(app_state_t* state) {
     if (state->bank && state->bank_cmd_index != get_undo_size(&state->bl_state.cmds)) {
         hlea_unload_events_bank(state->runtime_ctx, state->bank);
@@ -277,10 +291,11 @@ static void fire_event(app_state_t* state) {
     }
     if (!state->bank) {
         // todo: this could take a while (move to async)
-        data::file_data_provider_t fd_prov = {};
-        fd_prov.sounds_path = state->sounds_path.c_str();
-        fd_prov.use_oggs = true;
-        auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state, &fd_prov);
+        editor_file_data_provider_wrapper_t ed_fd_prov = {};
+        ed_fd_prov.editor_rt = state->editor_runtime;
+        ed_fd_prov.fd_prov.sounds_path = state->sounds_path.c_str();
+        ed_fd_prov.fd_prov.use_oggs = true;
+        auto bank_buffer = save_store_blob_buffer(&state->bl_state.data_state, &ed_fd_prov);
         state->bank = hlea_load_events_bank_from_buffer(state->runtime_ctx, bank_buffer.data(), bank_buffer.size());
         state->bank_cmd_index = get_undo_size(&state->bl_state.cmds);
     }

@@ -91,8 +91,6 @@ ma_result streaming_data_source_init(streaming_data_source_t* data_source, const
 void streaming_data_source_uninit(streaming_data_source_t* data_source) {    
     deinit(data_source->decoder_reader);
     
-    data_source->channels = 0;
-
     // uninitialize the base data source.
     ma_data_source_uninit(&data_source->base);
 }
