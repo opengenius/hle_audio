@@ -278,6 +278,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                 dec_info.buffer_block = streaming_info.file_range;
                 dec_info.decoder = dec_data.decoder;
 
+                info.format = dec_data.format;
                 info.meta = meta;
 
                 auto result = streaming_data_source_init(str_src, info);

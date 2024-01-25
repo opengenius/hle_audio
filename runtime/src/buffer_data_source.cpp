@@ -1,24 +1,10 @@
 #include "buffer_data_source.h"
 
 #include <algorithm>
+#include "data_source_utils.inl"
 
 namespace hle_audio {
 namespace rt {
-
-static size_t get_sample_byte_size(ma_format format) {
-    switch (format)
-    {
-    case ma_format_f32:
-        return sizeof(float);
-    case ma_format_s16:
-        return sizeof(int16_t);
-    
-    default:
-        assert(false);
-        break;
-    }
-    return 0;
-}
 
 static ma_result buffer_data_source_read(ma_data_source* data_source, void* frames_out, ma_uint64 frame_count, ma_uint64* frames_read) {
     buffer_data_source_t* src = (buffer_data_source_t*)data_source;
@@ -78,6 +64,7 @@ static ma_result buffer_data_source_seek(ma_data_source* data_source, ma_uint64 
     ds->read_bytes = 0;
     ds->read_cursor = frameIndex;
     ds->skip_read_bytes = frameIndex * sample_byte_size * channels;
+    
     return MA_SUCCESS;
 }
 
@@ -110,7 +97,6 @@ static ma_result buffer_data_source_get_length(ma_data_source* data_source, ma_u
     buffer_data_source_t* ds = (buffer_data_source_t*)data_source;
 
     assert(ds->meta.length_in_samples);
-
     *pLength = ds->meta.length_in_samples;
 
     return MA_SUCCESS;

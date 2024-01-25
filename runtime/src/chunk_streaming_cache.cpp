@@ -142,7 +142,9 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     chunk_request_result_t res = {};
     res.index = ~0u;
 
-    auto rest_size = request.buffer_block.offset + request.buffer_block.size - request.block_offset;
+    assert(request.block_offset < request.buffer_block.size);
+    
+    auto rest_size = request.buffer_block.size - request.block_offset;
     auto buf_size = rest_size < READ_CHUNK_SIZE ? rest_size : READ_CHUNK_SIZE;
 
     auto req_src_offset = request.buffer_block.offset + request.block_offset;

@@ -1,18 +1,21 @@
 #include "streaming_data_source.h"
 
+#include "data_source_utils.inl"
+
 namespace hle_audio {
 namespace rt {
 
 static ma_result streaming_data_source_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead) {
-    streaming_data_source_t* streaming_ds = (streaming_data_source_t*)pDataSource;
+    streaming_data_source_t* ds = (streaming_data_source_t*)pDataSource;
 
-    auto res = read_decoded(streaming_ds->decoder_reader, streaming_ds->channels, pFramesOut, frameCount, pFramesRead);
+    auto res = read_decoded(ds->decoder_reader, ds->channels, get_sample_byte_size(ds->format), pFramesOut, frameCount, pFramesRead);
     if (!res) {
-        // assert(streaming_ds->read_cursor == 0); // todo: handle starvation?
+        // todo: handle starvation?
+        // assert(streaming_ds->read_cursor == 0);
         return MA_BUSY;
     }
 
-    streaming_ds->read_cursor += *pFramesRead;
+    ds->read_cursor += *pFramesRead;
 
     return MA_SUCCESS;
 }
@@ -21,41 +24,41 @@ static ma_result streaming_data_source_seek(ma_data_source* pDataSource, ma_uint
     assert(false);
     
     // Seek to a specific PCM frame here. Return MA_NOT_IMPLEMENTED if seeking is not supported.
-    return MA_NOT_IMPLEMENTED;
-
     // ma_resource_manager_data_stream_seek_to_pcm_frame
+    return MA_NOT_IMPLEMENTED;
 }
 
 static ma_result streaming_data_source_get_data_format(
         ma_data_source* pDataSource, 
         ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap) {
-    streaming_data_source_t* streaming_ds = (streaming_data_source_t*)pDataSource;
+    streaming_data_source_t* ds = (streaming_data_source_t*)pDataSource;
 
     if (pFormat)
-        *pFormat = ma_format_f32;
+        *pFormat = ds->format;
 
     if (pChannels)
-        *pChannels = streaming_ds->channels;
+        *pChannels = ds->channels;
 
     if (pSampleRate)
-        *pSampleRate = streaming_ds->sample_rate;
+        *pSampleRate = ds->sample_rate;
     
     return MA_SUCCESS;
 }
 
 static ma_result streaming_data_source_get_cursor(ma_data_source* pDataSource, ma_uint64* pCursor) {
-    streaming_data_source_t* streaming_ds = (streaming_data_source_t*)pDataSource;
+    streaming_data_source_t* ds = (streaming_data_source_t*)pDataSource;
 
-    *pCursor = streaming_ds->read_cursor;
+    *pCursor = ds->read_cursor;
+
     return MA_SUCCESS;
 }
 
 static ma_result streaming_data_source_get_length(ma_data_source* pDataSource, ma_uint64* pLength) {
-    streaming_data_source_t* streaming_ds = (streaming_data_source_t*)pDataSource;
+    streaming_data_source_t* ds = (streaming_data_source_t*)pDataSource;
 
-    assert(streaming_ds->length_in_samples);
+    assert(ds->length_in_samples);
+    *pLength = ds->length_in_samples;
 
-    *pLength = streaming_ds->length_in_samples;
     return MA_SUCCESS;
 }
 
@@ -81,6 +84,7 @@ ma_result streaming_data_source_init(streaming_data_source_t* data_source, const
 
     init(data_source->decoder_reader, info.decoder_reader_info);
 
+    data_source->format = info.format;
     data_source->length_in_samples = info.meta.length_in_samples;
     data_source->channels = info.meta.channels;
     data_source->sample_rate = info.meta.sample_rate;

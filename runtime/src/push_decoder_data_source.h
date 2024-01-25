@@ -44,7 +44,8 @@ struct push_decoder_data_source_init_info_t {
 void init(push_decoder_data_source_t& src, const push_decoder_data_source_init_info_t& iinfo);
 void deinit(push_decoder_data_source_t& src);
 
-bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame_out, uint64_t frame_count, uint64_t* frames_read);
+bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, uint8_t sample_byte_size,
+        void* frame_out, uint64_t frame_count, uint64_t* frames_read);
 
 }
 }

@@ -11,6 +11,7 @@ struct streaming_data_source_t {
 
     push_decoder_data_source_t decoder_reader;
 
+    ma_format format;
     ma_uint64 length_in_samples;
     ma_uint32 channels;
     ma_uint32 sample_rate;
@@ -20,6 +21,7 @@ struct streaming_data_source_t {
 
 
 struct streaming_data_source_init_info_t {
+    ma_format format;
     file_data_t::meta_t meta;
 
     push_decoder_data_source_init_info_t decoder_reader_info;

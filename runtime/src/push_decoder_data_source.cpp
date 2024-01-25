@@ -1,4 +1,5 @@
 #include "push_decoder_data_source.h"
+
 #include <cstring>
 #include <algorithm>
 
@@ -74,7 +75,8 @@ static bool prepare_next_chunk(push_decoder_data_source_t& src) {
  * @return true when read successfully (frames_read is 0 when source end is reached)
  * @return false if there is still some data to read, but no data ready (data starvation case)
  */
-bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame_out, uint64_t frame_count, uint64_t* frames_read) {
+bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, uint8_t sample_byte_size, 
+        void* frame_out, uint64_t frame_count, uint64_t* frames_read) {
     // deque ready output
     auto processed_inputs_count = release_consumed_inputs(src.decoder);
     if (processed_inputs_count) {
@@ -119,7 +121,7 @@ bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame
         return false;
     }
 
-    uint64_t frames_in_bytes = frame_count * sizeof(float) * channels;
+    uint64_t frames_in_bytes = frame_count * sample_byte_size * channels;
 
     uint64_t bytes_consumed = std::min(src.read_buffer.size - src.read_bytes, frames_in_bytes);
     memcpy(frame_out, (uint8_t*)src.read_buffer.data + src.read_bytes, size_t(bytes_consumed));
@@ -131,7 +133,7 @@ bool read_decoded(push_decoder_data_source_t& src, uint8_t channels, void* frame
         src.read_buffer = next_output(src.decoder, src.read_buffer);
     }
 
-    *frames_read = bytes_consumed / (sizeof(float) * channels);
+    *frames_read = bytes_consumed / (sample_byte_size * channels);
 
     return true;
 }
