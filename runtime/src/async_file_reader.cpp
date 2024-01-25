@@ -23,8 +23,9 @@ struct async_file_data_t {
 };
 
 struct ring_indices_u32_t {
-    std::atomic<uint32_t> read_pos;
-    std::atomic<uint32_t> write_pos;
+    using indices_type = uint32_t;
+    std::atomic<indices_type> read_pos;
+    std::atomic<indices_type> write_pos;
 };
 
 static const size_t MAX_OPENED_FILES = 512;
@@ -56,8 +57,7 @@ static bool can_read(const ring_indices_u32_t& indices) {
 
 // thread-safe
 static bool can_write(const ring_indices_u32_t& indices, uint32_t range) {
-    using indices_type = decltype(ring_indices_u32_t::read_pos)::value_type;
-    return indices.write_pos.load() != indices_type(indices.read_pos.load() + range);
+    return indices.write_pos.load() != ring_indices_u32_t::indices_type(indices.read_pos.load() + range);
 }
 
 constexpr bool is_power_of_2(size_t v) {

@@ -25,7 +25,7 @@ static ma_result buffer_data_source_read(ma_data_source* data_source, void* fram
     }
 
     if (0 < src->skip_read_bytes) {
-        auto skipped_read_bytes = std::min(src->skip_read_bytes, src->read_buffer.size);
+        auto skipped_read_bytes = std::min(src->skip_read_bytes, static_cast<uint64_t>(src->read_buffer.size));
         src->read_bytes += skipped_read_bytes;
         src->skip_read_bytes -= skipped_read_bytes;
         if (src->read_buffer.size == src->read_bytes) return MA_BUSY;
