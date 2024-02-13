@@ -37,11 +37,18 @@ struct chunk_streaming_cache_t {
         uint32_t src_offset;
 
         uint32_t use_count;
-        async_read_token_t read_token;
+        chunk_status_e status;
     };
 
     chunk_t chunks[MAX_POOL_CHUNKS];
     uint8_t* chunks_buffer;
+
+    struct pending_read_t {
+        async_read_token_t read_token;
+        uint16_t chunk_index;
+    };
+    pending_read_t pending_reads[MAX_POOL_CHUNKS];
+    uint32_t pending_reads_count;
 
     index_list_entry_t free_chunk_entries[MAX_POOL_CHUNKS + 1];
     index_list_t free_chunks;
@@ -169,9 +176,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
         buffer.size = buf_size;
 
         res.index = ch_index;
-        res.data = buffer;
-        // todo: do not check read_token after READY is got? (read_token overflow case)
-        res.status = check_request_running(cache.async_io, ch_ref.read_token) ? chunk_status_e::READING : chunk_status_e::READY;            
+        res.data = buffer;       
 
         return res;
     }
@@ -208,7 +213,15 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     read_req.file = src_data.file;
     read_req.offset = req_src_offset;
     read_req.out_buffer = buffer;
-    new_ch.read_token = request_read(cache.async_io, read_req); // todo: check result
+    new_ch.status = chunk_status_e::READING;
+
+    chunk_streaming_cache_t::pending_read_t read_op = {};
+    read_op.read_token = request_read(cache.async_io, read_req);
+    read_op.chunk_index = free_index;
+    ++new_ch.use_count;
+
+    assert(cache.pending_reads_count < std::size(cache.pending_reads));
+    cache.pending_reads[cache.pending_reads_count++] = read_op;
 
     cache.chunks[free_index] = new_ch;
     hash::insert(&cache.chunk_indices, req_key_hash, free_index);
@@ -218,9 +231,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     return res;
 }
 
-void release_chunk(chunk_streaming_cache_t& cache, uint32_t chunk_index) {
-    std::unique_lock<std::mutex> lk(cache.sync_mutex);
-
+static void release_chunk_no_lock(chunk_streaming_cache_t& cache, uint32_t chunk_index) {
     auto& ch_ref = cache.chunks[chunk_index];
     assert(0 != ch_ref.use_count);
     --ch_ref.use_count;
@@ -230,9 +241,36 @@ void release_chunk(chunk_streaming_cache_t& cache, uint32_t chunk_index) {
     }
 }
 
-chunk_status_e chunk_status(const chunk_streaming_cache_t& cache, uint32_t chunk_index) {
+void release_chunk(chunk_streaming_cache_t& cache, uint32_t chunk_index) {
+    std::unique_lock<std::mutex> lk(cache.sync_mutex);
+
+    release_chunk_no_lock(cache, chunk_index);
+}
+
+chunk_status_e chunk_status(chunk_streaming_cache_t& cache, uint32_t chunk_index) {
+    std::unique_lock<std::mutex> lk(cache.sync_mutex);
+
     auto& ch = cache.chunks[chunk_index];
-    return check_request_running(cache.async_io, ch.read_token) ? chunk_status_e::READING : chunk_status_e::READY;
+    return ch.status;
+}
+
+void update_pending_reads(chunk_streaming_cache_t* cache) {
+    std::unique_lock<std::mutex> lk(cache->sync_mutex);
+
+    uint32_t finished = 0;
+    for (uint32_t i = 0; i < cache->pending_reads_count; ++i) {
+        auto& read = cache->pending_reads[i];
+        if (!check_request_running(cache->async_io, read.read_token)) {
+            cache->chunks[read.chunk_index].status = chunk_status_e::READY;
+            release_chunk_no_lock(*cache, read.chunk_index);
+            ++finished;
+        } else break;
+    }
+
+    for (uint32_t i = finished; i < cache->pending_reads_count; ++i) {
+        cache->pending_reads[i - finished] = cache->pending_reads[i];
+    }
+    cache->pending_reads_count -= finished;
 }
 
 }}
