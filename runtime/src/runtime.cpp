@@ -1072,6 +1072,7 @@ static void process_pending_sounds(hlea_context_t* ctx) {
 }
 
 void hlea_process_frame(hlea_context_t* ctx) {
+    update_pending_reads(ctx->streaming_cache);
     hlea_process_active_groups(ctx);
     process_pending_sounds(ctx);
 }
