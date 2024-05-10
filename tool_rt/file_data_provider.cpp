@@ -1,6 +1,6 @@
 #include "file_data_provider.h"
 
-#include <format>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 
