@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include "rt_types.h"
 #include "streaming_data_source.h"
 #include "buffer_data_source.h"

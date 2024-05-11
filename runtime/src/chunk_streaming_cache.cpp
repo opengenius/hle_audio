@@ -1,5 +1,6 @@
 #include "chunk_streaming_cache.h"
 
+#include <cstring>
 #include <mutex>
 
 #include "alloc_utils.inl"

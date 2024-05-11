@@ -1,4 +1,5 @@
 #include "node_state_stack.h"
+#include <cstring>
 #include "chunked_stack_allocator.inl"
 
 namespace hle_audio {

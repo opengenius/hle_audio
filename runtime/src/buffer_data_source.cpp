@@ -1,5 +1,6 @@
 #include "buffer_data_source.h"
 
+#include <cstring>
 #include <algorithm>
 #include "data_source_utils.inl"
 
