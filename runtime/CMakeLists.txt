@@ -37,9 +37,12 @@ target_link_libraries(hlea_runtime_common
         hlea_rt_libs
 )
 
-add_library(hlea_runtime STATIC
+set(RT_SRC
     src/runtime.cpp
+    src/runtime_groups.cpp
 )
+
+add_library(hlea_runtime STATIC ${RT_SRC})
 
 # duplicate public includes from private hlea_runtime_common
 target_include_directories(hlea_runtime
@@ -54,7 +57,7 @@ target_link_libraries(hlea_runtime
 
 if (HLEA_BUILD_EDITOR)
     add_library(hlea_runtime_editor STATIC
-        src/runtime.cpp
+        ${RT_SRC}
         src/editor_runtime.cpp
     )
 

@@ -9,6 +9,11 @@
 #include "chunk_streaming_cache.h"
 #include "decoder_mp3.h"
 #include "decoder_pcm.h"
+#include "file_api_vfs_bridge.h"
+
+namespace hle_audio { namespace rt {
+struct editor_runtime_t;
+}}
 
 static const uint16_t MAX_SOUNDS = 1024;
 static const uint16_t MAX_ACTIVE_GROUPS = 128;
@@ -109,6 +114,13 @@ struct array_with_size_t {
     }
 };
 
+template<typename T>
+static const T* bank_get(const hlea_event_bank_t* bank, 
+        const hle_audio::rt::array_view_t<T> arr, size_t index) {
+    auto data_ptr = bank->data_buffer_ptr;
+    return &arr.get(data_ptr, index);
+}
+
 struct hlea_context_t {
     using streaming_data_source_t = hle_audio::rt::streaming_data_source_t;
     using buffer_data_source_t = hle_audio::rt::buffer_data_source_t;
@@ -159,3 +171,12 @@ struct hlea_context_t {
     array_with_size_t<hle_audio::rt::pcm_decoder_t*, MAX_SOUNDS, uint16_t> decoders_pcm;
     array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_pcm_indices;
 };
+
+
+struct node_funcs_t {
+    using node_desc_t = hle_audio::rt::node_desc_t;
+
+    memory_layout_t state_mem_layout;
+    node_desc_t (*process_func)(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state);
+};
+node_funcs_t get_node_handler(hle_audio::rt::node_type_e type);
