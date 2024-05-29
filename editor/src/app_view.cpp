@@ -13,7 +13,7 @@ namespace editor {
 struct command_stack_t;
 
 static bool TreeNodeWithRemoveButton(uint32_t node_index, const char* label, bool* remove_pressed) {
-    bool expanded = ImGui::TreeNodeEx((void*)(intptr_t)node_index, ImGuiTreeNodeFlags_AllowItemOverlap, label);
+    bool expanded = ImGui::TreeNodeEx((void*)(intptr_t)node_index, ImGuiTreeNodeFlags_AllowItemOverlap | ImGuiTreeNodeFlags_DefaultOpen, label);
     ImGui::SameLine();
     ImGui::PushID(expanded ? -1 - node_index : node_index); // fix id conflict with expanded node and its unexpanded children
     if (ImGui::SmallButton("-")) {
@@ -140,14 +140,16 @@ static void build_node_tree(const data_state_t& state, const view_state_t& view_
         ImGui::OpenPopup("create_node_popup");
     }
 
-    if (ImGui::BeginPopup("create_node_popup")) {
-        for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
-            if (ImGui::Selectable(rt::c_node_type_names[i])) {
-                out_action_type = view_action_type_e::NODE_ADD;
-                out_action.action_data = (rt::node_type_e)i;
+    if (out_action.node_desc.id == node_desc.id) {
+        if (ImGui::BeginPopup("create_node_popup")) {
+            for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
+                if (ImGui::Selectable(rt::c_node_type_names[i])) {
+                    out_action_type = view_action_type_e::NODE_ADD;
+                    out_action.action_data = (rt::node_type_e)i;
+                }
             }
+            ImGui::EndPopup();
         }
-        ImGui::EndPopup();
     }
 
     if (removePressed) {
@@ -527,6 +529,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 events_tab_flags = ImGuiTabItemFlags_SetSelected;
             }
             if (ImGui::BeginTabItem("Events", nullptr, events_tab_flags)) {
+                if (ImGui::Button("+")) {
+                    action = view_action_type_e::EVENT_ADD;
+                    mut_view_state.focus_selected_event = true;
+                }
+                ImGui::SameLine();
                 if (ImGui_std::InputText("Filter", "enter text here", 
                         &mut_view_state.event_filter_str, ImGuiInputTextFlags_AutoSelectAll)) {
                     action = view_action_type_e::EVENT_FILTER;
