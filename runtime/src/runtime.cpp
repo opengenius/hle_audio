@@ -10,7 +10,6 @@
 #include "default_allocator.h"
 #include "decoder.h"
 #include "async_file_reader.h"
-#include "internal_editor_runtime.h"
 #include "internal_types.h"
 #include "chunk_streaming_cache.h"
 #include "decoder_mp3.h"
@@ -192,20 +191,6 @@ hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
 
     return ctx.release();
 }
-
-#ifdef HLEA_USE_RT_EDITOR
-void hlea_bind(hlea_context_t* ctx, editor_runtime_t* editor_rt) {
-    ctx->editor_hooks = editor_rt;
-
-    hle_audio::rt::runtime_env_t env = {};
-    env.pVFS = ctx->pVFS;
-    env.allocator = ctx->allocator;
-    env.async_io = ctx->async_io;
-    env.cache = ctx->streaming_cache;
-    env.engine = &ctx->engine;
-    bind(editor_rt, &env);
-}
-#endif
 
 void hlea_destroy(hlea_context_t* ctx) {
     destroy(ctx->streaming_cache);

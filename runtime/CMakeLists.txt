@@ -5,7 +5,7 @@ FetchContent_Declare(minimp3
 )
 FetchContent_Populate(minimp3)
 
-set(RUNTIME_SRC
+add_library(hlea_runtime STATIC
     src/node_state_stack.cpp
     src/default_allocator.cpp
     src/file_api_vfs_bridge.cpp
@@ -16,64 +16,34 @@ set(RUNTIME_SRC
     src/streaming_data_source.cpp
     src/chunk_streaming_cache.cpp
     src/buffer_data_source.cpp
-)
-
-add_library(hlea_runtime_common STATIC
-    ${RUNTIME_SRC}
-)
-
-target_include_directories(hlea_runtime_common
-    PUBLIC 
-        include
-    PRIVATE
-        ${minimp3_SOURCE_DIR}
-)
-
-target_link_libraries(hlea_runtime_common
-    PRIVATE
-        common_private
-    PUBLIC
-        runtime_data_types
-        hlea_rt_libs
-)
-
-set(RT_SRC
     src/runtime.cpp
     src/runtime_groups.cpp
 )
 
-add_library(hlea_runtime STATIC ${RT_SRC})
-
-# duplicate public includes from private hlea_runtime_common
-target_include_directories(hlea_runtime
-    PUBLIC 
-        include
+target_link_libraries(hlea_runtime
+PRIVATE
+    common_private
+    hlea_rt_libs
+PUBLIC
+    runtime_data_types
 )
 
-target_link_libraries(hlea_runtime
-    PRIVATE
-        hlea_runtime_common
+target_include_directories(hlea_runtime
+PUBLIC 
+    include
+PRIVATE
+    ${minimp3_SOURCE_DIR}
 )
 
 if (HLEA_BUILD_EDITOR)
     add_library(hlea_runtime_editor STATIC
-        ${RT_SRC}
         src/editor_runtime.cpp
     )
 
-    target_compile_definitions(hlea_runtime_editor 
-        PRIVATE 
-            HLEA_USE_RT_EDITOR
-    )
-
-    # duplicate public includes from private hlea_runtime_common    
-    target_include_directories(hlea_runtime_editor
-        PUBLIC 
-            include
-    )
-
     target_link_libraries(hlea_runtime_editor
-        PRIVATE
-            hlea_runtime_common
+    PUBLIC
+        hlea_runtime
+    PRIVATE
+        hlea_rt_libs
     )
 endif()

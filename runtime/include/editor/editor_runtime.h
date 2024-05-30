@@ -3,6 +3,8 @@
 #include <cstdint>
 #include "rt_types.h"
 
+struct hlea_context_t;
+
 namespace hle_audio {
 namespace rt {
 
@@ -10,6 +12,8 @@ struct editor_runtime_t;
 
 editor_runtime_t* create_editor_runtime();
 void destroy(editor_runtime_t* rt);
+
+void bind(editor_runtime_t* editor_rt, hlea_context_t* ctx);
 
 void cache_audio_file_data(editor_runtime_t* rt, const char* path, uint32_t file_index, rt::range_t data_chunk_range);
 void drop_file_cache(editor_runtime_t* rt);

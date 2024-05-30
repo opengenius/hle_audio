@@ -10,8 +10,6 @@
 #include <algorithm>
 #include <cassert>
 
-void hlea_bind(hlea_context_t* ctx, hle_audio::rt::editor_runtime_t* editor_rt);
-
 namespace fs = std::filesystem;
 
 namespace hle_audio {
@@ -194,7 +192,7 @@ static void create_context(app_state_t* state) {
     hlea_context_create_info_t ctx_info = {};
     ctx_info.output_bus_count = data_state.output_buses.size();
     state->runtime_ctx = hlea_create(&ctx_info);
-    hlea_bind(state->runtime_ctx, state->editor_runtime);
+    bind(state->editor_runtime, state->runtime_ctx);
     
     assert(state->runtime_ctx);
 }

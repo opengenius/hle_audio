@@ -121,6 +121,27 @@ static const T* bank_get(const hlea_event_bank_t* bank,
     return &arr.get(data_ptr, index);
 }
 
+struct bank_streaming_source_info_t {
+    using streaming_source_handle = hle_audio::rt::streaming_source_handle;
+    using range_t = hle_audio::rt::range_t;
+    
+    streaming_source_handle streaming_src;
+    range_t file_range;
+};
+
+struct editor_api_t {
+    using editor_runtime_t = hle_audio::rt::editor_runtime_t;
+
+    editor_runtime_t* inst;
+    bank_streaming_source_info_t (*retrieve_streaming_info)(editor_runtime_t* editor_rt, uint32_t file_index);
+};
+
+static bank_streaming_source_info_t retrieve_streaming_info(editor_api_t& editor_api, uint32_t file_index) {
+    if (!editor_api.inst) return {};
+
+    return editor_api.retrieve_streaming_info(editor_api.inst, file_index);
+}
+
 struct hlea_context_t {
     using streaming_data_source_t = hle_audio::rt::streaming_data_source_t;
     using buffer_data_source_t = hle_audio::rt::buffer_data_source_t;
@@ -138,9 +159,7 @@ struct hlea_context_t {
 
     ma_engine engine;
 
-#ifdef HLEA_USE_RT_EDITOR
-    hle_audio::rt::editor_runtime_t* editor_hooks;
-#endif
+    editor_api_t editor_hooks;
 
     ma_sound_group output_bus_groups[MAX_OUPUT_BUSES];
     uint8_t output_bus_group_count;
@@ -171,7 +190,6 @@ struct hlea_context_t {
     array_with_size_t<hle_audio::rt::pcm_decoder_t*, MAX_SOUNDS, uint16_t> decoders_pcm;
     array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_pcm_indices;
 };
-
 
 struct node_funcs_t {
     using node_desc_t = hle_audio::rt::node_desc_t;

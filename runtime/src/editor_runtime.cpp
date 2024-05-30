@@ -1,5 +1,6 @@
 #include "editor/editor_runtime.h"
 #include "internal_editor_runtime.h"
+#include "internal_types.h"
 
 #include "miniaudio_public.h"
 
@@ -9,6 +10,14 @@
 
 namespace hle_audio {
 namespace rt {
+
+struct runtime_env_t {
+    ma_vfs* pVFS;
+    allocator_t allocator;
+    async_file_reader_t* async_io;
+    chunk_streaming_cache_t* cache;
+    ma_engine* engine;
+};
 
 struct editor_runtime_t {
     runtime_env_t env;
@@ -47,8 +56,20 @@ void destroy(editor_runtime_t* rt) {
     delete rt;
 }
 
-void bind(editor_runtime_t* editor_rt, const runtime_env_t* env) {
-    editor_rt->env = *env;
+void bind(editor_runtime_t* editor_rt, hlea_context_t* ctx) {
+    editor_api_t hooks = {};
+    hooks.inst = editor_rt;
+    hooks.retrieve_streaming_info = hle_audio::rt::retrieve_streaming_info;
+    ctx->editor_hooks = hooks;
+
+    hle_audio::rt::runtime_env_t env = {};
+    env.pVFS = ctx->pVFS;
+    env.allocator = ctx->allocator;
+    env.async_io = ctx->async_io;
+    env.cache = ctx->streaming_cache;
+    env.engine = &ctx->engine;
+    
+    editor_rt->env = env;
 }
 
 void cache_audio_file_data(editor_runtime_t* rt, const char* path, uint32_t file_index, rt::range_t data_chunk_range) {

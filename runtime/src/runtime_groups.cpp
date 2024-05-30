@@ -102,14 +102,8 @@ static bank_streaming_source_info_t retrieve_bank_streaming_info(hlea_context_t*
 
         return res;
     }
-#ifdef HLEA_USE_RT_EDITOR
-    else if (ctx->editor_hooks) {
-        // editor path, per file reading
-        return retrieve_streaming_info(ctx->editor_hooks, file_index);
-    }
-#endif
-
-    return {};
+    // editor path, per file reading
+    return retrieve_streaming_info(ctx->editor_hooks, file_index);
 }
 
 struct decoder_result_t {
