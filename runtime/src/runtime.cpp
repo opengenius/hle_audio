@@ -30,8 +30,6 @@ using hle_audio::rt::data_buffer_t;
 using hle_audio::rt::buffer_t;
 using hle_audio::rt::file_data_t;
 using hle_audio::rt::array_view_t;
-using hle_audio::rt::node_desc_t;
-using hle_audio::rt::node_type_e;
 using hle_audio::rt::root_header_t;
 using hle_audio::rt::event_t;
 using hle_audio::rt::action_type_e;
@@ -45,60 +43,6 @@ void group_release_all_in_bank(hlea_context_t* ctx, const hlea_event_bank_t* ban
 void process_pending_sounds(hlea_context_t* ctx);
 
 /////////////////////////////////////////////////////////////////////////////////////////
-
-template<typename T>
-constexpr memory_layout_t static_type_layout() {
-    return {sizeof(T), alignof(T)};
-}
-
-static node_desc_t sequence_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
-    auto s = (sequence_rt_state_t*)state;
-    
-    auto seq_node = bank_get(bank, bank->static_data->nodes_sequence, node_desc.index);
-
-    auto seq_size = seq_node->nodes.count;
-    if (seq_size <= s->current_index) return {};
-
-    auto res = seq_node->nodes.get(bank->data_buffer_ptr, s->current_index);
-
-    // update state
-    ++s->current_index;
-
-    return res;
-}
-
-static node_desc_t repeat_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
-    auto s = (repeat_rt_state_t*)state;
-        
-    auto repeat_node = bank_get(bank, bank->static_data->nodes_repeat, node_desc.index);
-
-    if (repeat_node->repeat_count && repeat_node->repeat_count <= s->iteration_counter) return {};
-
-    auto res = repeat_node->node;
-
-    // update state
-    ++s->iteration_counter;
-
-    return res;
-}
-
-static node_desc_t random_process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* /*state*/) {
-    auto random_node = bank_get(bank, bank->static_data->nodes_random, node_desc.index);
-    int random_index = rand() % random_node->nodes.count;
-    return random_node->nodes.get(bank->data_buffer_ptr, random_index);
-}
-
-static const node_funcs_t g_node_handlers[] = {
-    {}, // None
-    {}, // File
-    {{}, random_process_node}, // Random
-    {static_type_layout<sequence_rt_state_t>(), sequence_process_node}, // Sequence
-    {static_type_layout<repeat_rt_state_t>(), repeat_process_node}, // Repeat
-};
-
-node_funcs_t get_node_handler(hle_audio::rt::node_type_e type) {
-    return g_node_handlers[size_t(type)];
-}
 
 static ma_result task_executor_job_process(ma_job* pJob) {
     hlea_job_t job = {};

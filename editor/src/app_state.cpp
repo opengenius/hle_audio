@@ -2,6 +2,7 @@
 #include "app_logic.h"
 #include "app_view.h"
 #include "file_data_provider.h"
+#include "data_state.h"
 
 #include "hlea/runtime.h"
 #include "editor/editor_runtime.h"
@@ -9,6 +10,11 @@
 #include <filesystem>
 #include <algorithm>
 #include <cassert>
+
+using hle_audio::data::output_bus_t;
+using hle_audio::data::file_flow_node_t;
+using hle_audio::data::random_flow_node_t;
+using hle_audio::data::flow_node_type_t;
 
 namespace fs = std::filesystem;
 
@@ -43,10 +49,11 @@ static void update_active_group(app_state_t* state, size_t selected_group) {
 
     view_state.active_group_index = selected_group;
 
-    if (selected_group == invalid_index) return;
+    if (selected_group == data::invalid_index) return;
 
 
-    view_state.selected_group_state = get_group(&state->bl_state.data_state, selected_group);
+    view_state.selected_group_state = data::get_group(&state->bl_state.data_state, selected_group);
+    ++view_state.selected_group_state_revison;
 }
 
 static void update_active_event(app_state_t* state, size_t active_index) {
@@ -54,7 +61,7 @@ static void update_active_event(app_state_t* state, size_t active_index) {
 
     view_state.active_event_index = active_index;
     
-    if (active_index == invalid_index) return;
+    if (active_index == data::invalid_index) return;
 
     auto& event = state->bl_state.data_state.events[active_index];
     view_state.event_state = event;
@@ -103,12 +110,12 @@ static void filter_events(app_state_t* state) {
 
     // exit early if no filter
     if (view_state.event_filter_str.size() == 0 &&
-        view_state.event_filter_group_index == invalid_index) {
+        view_state.event_filter_group_index == data::invalid_index) {
         filtered_state.list_index = view_state.active_event_index;
         return;
     }
 
-    filtered_state.list_index = invalid_index;
+    filtered_state.list_index = data::invalid_index;
 
     const auto& events = state->bl_state.data_state.events;
     for (size_t event_index = 0; event_index < events.size(); ++event_index) {
@@ -118,7 +125,7 @@ static void filter_events(app_state_t* state) {
         if (!find_substring_ic(event.name, view_state.event_filter_str)) continue;
 
         // filter group
-        if (view_state.event_filter_group_index != invalid_index &&
+        if (view_state.event_filter_group_index != data::invalid_index &&
             !is_event_target_group(event, view_state.event_filter_group_index)) continue;
 
         filtered_state.indices.push_back(event_index);
@@ -137,12 +144,12 @@ static void update_mutable_view_state(app_state_t* state) {
 
     // reset event group filter if groups list changed
     if (view_state.groups_size_on_event_filter_group != groups_size)
-        view_state.event_filter_group_index = invalid_index;
+        view_state.event_filter_group_index = data::invalid_index;
 
     auto selected_group = view_state.active_group_index;
     if (groups_size == 0u) {
-        selected_group = invalid_index;
-    } else if (selected_group != invalid_index && 
+        selected_group = data::invalid_index;
+    } else if (selected_group != data::invalid_index && 
         groups_size <= selected_group) {
         selected_group = groups_size - 1;
     }
@@ -151,7 +158,7 @@ static void update_mutable_view_state(app_state_t* state) {
     // todo: check index update case (when some previous events were removed)
     auto selected_event_index = view_state.active_event_index;
     if (data_state.events.size() <= selected_event_index) {
-        selected_event_index = invalid_index;
+        selected_event_index = data::invalid_index;
     }
     update_active_event(state, selected_event_index);
 
@@ -266,12 +273,12 @@ void init_with_data(app_state_t* state, const char* filepath, const char* sound_
     update_mutable_view_state(state);
 }
 
-class editor_file_data_provider_wrapper_t : public hle_audio::editor::audio_file_data_provider_ti {
+class editor_file_data_provider_wrapper_t : public hle_audio::data::audio_file_data_provider_ti {
 public:
     rt::editor_runtime_t* editor_rt;
     data::file_data_provider_t fd_prov = {};
 
-    audio_file_data_t get_file_data(const char* filename, uint32_t file_index) override {
+    data::audio_file_data_t get_file_data(const char* filename, uint32_t file_index) override {
         auto res = fd_prov.get_file_data(filename, file_index);
 
         cache_audio_file_data(editor_rt, filename, file_index, res.data_chunk_range);
@@ -436,40 +443,28 @@ bool process_frame(app_state_t* state) {
 
     case view_action_type_e::NODE_ADD: {
         auto& node_action = view_state.node_action;
-        auto add_node_type = std::get<rt::node_type_e>(node_action.action_data);
-        assert(add_node_type != rt::node_type_e::None);
 
-        switch (node_action.node_desc.type)
-        {
-        case rt::node_type_e::None:
-            create_root_node(bl_state, view_state.active_group_index, add_node_type);
-            break;
-        
-        case rt::node_type_e::Repeat:
-            create_repeat_node(bl_state, node_action.node_desc, add_node_type);
+        auto add_node_type = std::get<flow_node_type_t>(node_action.action_data);
+        assert(add_node_type != data::invalid_node_type);
 
-            break;
-        default:
-            // this is add child node
-            create_node(bl_state, node_action.node_desc, add_node_type);
+        create_node(bl_state, view_state.active_group_index, add_node_type, node_action.add_position);
 
-            break;
-        }
         update_active_group(state, view_state.active_group_index);
 
         break;
     }
     case view_action_type_e::NODE_UPDATE: {
         auto& node_action = view_state.node_action;
-        switch (node_action.node_desc.type)
+        auto type = bl_state->data_state.fnodes[node_action.node_id].type;
+        switch (type)
         {
-        case rt::node_type_e::Repeat:
-            update_repeat_node(bl_state, node_action.node_desc, 
-                    std::get<node_repeat_t>(node_action.action_data));
+        case data::RANDOM_FNODE_TYPE:
+            update_random_node(bl_state, node_action.node_id, 
+                    std::get<random_flow_node_t>(node_action.action_data));
             break;
-        case rt::node_type_e::File:
-            update_file_node(bl_state, node_action.node_desc, 
-                    std::get<file_node_t>(std::move(node_action.action_data)));
+        case data::FILE_FNODE_TYPE:
+            update_file_node(bl_state, node_action.node_id, 
+                    std::get<file_flow_node_t>(node_action.action_data));
         default:
             break;
         }
@@ -478,27 +473,28 @@ bool process_frame(app_state_t* state) {
     case view_action_type_e::NODE_FILE_ASSIGN_SOUND: {
         auto& node_action = view_state.node_action;
 
-        assert(node_action.node_desc.type == rt::node_type_e::File);
+        auto type = bl_state->data_state.fnodes[node_action.node_id].type;
+        assert(type == data::FILE_FNODE_TYPE);
         
         auto file_list_index = view_state.selected_sound_file_index;
-        const auto& filename = state->sound_files_u8_names[file_list_index];
-        assign_file_node_file(bl_state, node_action.node_desc, filename);
+        if (file_list_index != data::invalid_index) {
+            const auto& filename = state->sound_files_u8_names[file_list_index];
+            assign_file_node_file(bl_state, node_action.node_id, filename);
+        }
             
         break;
     }
     case view_action_type_e::NODE_REMOVE: {
-        auto& node_action = view_state.node_action;
-        if (node_action.parent_node_desc.type == rt::node_type_e::None) {
-            // root node case, detach from group
-            remove_root_node(bl_state, 
-                view_state.active_group_index);
-        } else {
-            remove_node(bl_state, 
-                node_action.parent_node_desc, std::get<uint32_t>(node_action.action_data));
-        }
+        remove_nodes(bl_state, view_state.active_group_index, view_state.moved_nodes);
+
         update_active_group(state, view_state.active_group_index);
 
-        break;        
+        break;
+    }
+    case view_action_type_e::NODE_MOVED: {
+        move_nodes(bl_state, view_state.moved_nodes, view_state.moved_nodes_positions);
+
+        break;
     }
     case view_action_type_e::REFRESH_SOUND_LIST:
         refresh_wav_list(state);

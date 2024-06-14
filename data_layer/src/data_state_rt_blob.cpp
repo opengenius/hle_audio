@@ -1,4 +1,4 @@
-#include "data_types.h"
+#include "data_state.h"
 #include "rt_types.h"
 #include <vector>
 #include <unordered_map>
@@ -65,13 +65,9 @@ static rt::char_offset_t write(std::vector<uint8_t>& buf, std::u8string_view str
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-namespace editor {
+namespace data {
 
 struct save_context_t {
-    std::vector<rt::file_node_t> nodes_file;
-    std::vector<rt::random_node_t> nodes_random;
-    std::vector<rt::sequence_node_t> nodes_sequence;
-    std::vector<rt::repeat_node_t> nodes_repeat;
     std::vector<rt::file_data_t> file_data;
 
     struct file_data_t {
@@ -80,21 +76,24 @@ struct save_context_t {
     };
     std::vector<file_data_t> sound_file_data;
     std::unordered_map<std::u8string_view, uint32_t> sound_files_indices;
+
+    struct saved_node_offset_t {
+        data::node_id_t node;
+        rt::offset_t offset;
+    };
+    std::vector<saved_node_offset_t> saved_group_nodes;
 };
 
 static rt::named_group_t make_named_group(std::vector<uint8_t>& buf, 
-        std::string_view name,
-        float volume,
-        float cross_fade_time,
-        uint8_t output_bus_index,
-        const rt::node_desc_t& root_node) {
+        const named_group_t& data_group,
+        rt::offset_t first_node_offset) {
 
     rt::named_group_t gr = {};
-    gr.name = write(buf, name);
-    gr.volume = volume;
-    gr.cross_fade_time = cross_fade_time;
-    gr.output_bus_index = output_bus_index;
-    gr.node = root_node;
+    gr.name = write(buf, data_group.name);
+    gr.volume = data_group.volume;
+    gr.cross_fade_time = data_group.cross_fade_time;
+    gr.output_bus_index = data_group.output_bus_index;
+    gr.first_node_offset = first_node_offset;
 
     return gr;
 }
@@ -113,14 +112,7 @@ static rt::offset_typed_t<rt::store_t> write_store(std::vector<uint8_t>& buf,
         const save_context_t& ctx,
         const std::vector<rt::named_group_t>& groups,
         const std::vector<rt::event_t>& events) {
-
-    // todo: use char_offset_t instead of indexing into sound_files
-
     rt::store_t store = {};
-    store.nodes_file = write(buf, ctx.nodes_file);
-    store.nodes_random = write(buf, ctx.nodes_random);
-    store.nodes_sequence = write(buf, ctx.nodes_sequence);
-    store.nodes_repeat = write(buf, ctx.nodes_repeat);
     store.groups = write(buf, groups);
     store.events = write(buf, events);
     store.file_data = write(buf, ctx.file_data);
@@ -128,7 +120,7 @@ static rt::offset_typed_t<rt::store_t> write_store(std::vector<uint8_t>& buf,
     return write_single(buf, store);
 }
 
-static rt::file_node_t cache_file(std::vector<uint8_t>& buf, save_context_t* ctx, const file_node_t& file_node) {
+static rt::file_node_t cache_file(std::vector<uint8_t>& buf, save_context_t* ctx, const file_flow_node_t& file_node) {
     std::u8string_view filename = file_node.filename;
 
     uint32_t index = 0;
@@ -153,77 +145,78 @@ static rt::file_node_t cache_file(std::vector<uint8_t>& buf, save_context_t* ctx
     return res;
 }
 
-static rt::node_desc_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx, 
-        const data_state_t* state, const node_desc_t& desc) {
+static void cache_group_node_offset(save_context_t* ctx, node_id_t node_id, rt::offset_t offset) {
+    save_context_t::saved_node_offset_t info = {};
+    info.node = node_id;
+    info.offset = offset;
+    ctx->saved_group_nodes.push_back(info);
+}
 
-    auto index = get_index(state->node_ids, desc.id);
-    uint16_t out_index = 0;
-    switch (desc.type)
+static rt::offset_t find_cached_group_node_offset(save_context_t* ctx, node_id_t node_id) {
+    for (auto& record : ctx->saved_group_nodes) {
+        if (record.node == node_id) {
+            return record.offset;
+        }
+    }
+    return {};
+}
+
+static rt::offset_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx, 
+        const data_state_t* state, const named_group_t& group, node_id_t node_id) {
+
+    if (invalid_node_id == node_id) {
+        return {};
+    }
+
+    auto cached_node_offset = find_cached_group_node_offset(ctx, node_id);
+    if (cached_node_offset) {
+        return cached_node_offset;
+    }
+
+    auto node = get_node_data(state, node_id);
+    switch (node.type)
     {
-    case rt::node_type_e::None: {
-        break;
-    }
-    case rt::node_type_e::File: {
-        auto& file_node = state->nodes_file[index];
+    case FILE_FNODE_TYPE: {
+        auto& type_data = get_file_node(state, node_id);
+        rt::file_node_t rt_node = cache_file(buf, ctx, type_data);
+        auto res = write_single(buf, rt_node);
+        cache_group_node_offset(ctx, node_id, res.pos);
 
-        out_index = (uint16_t)ctx->nodes_file.size();
-
-        ctx->nodes_file.push_back(cache_file(buf, ctx, file_node));
-
-        break;
-    }
-    case rt::node_type_e::Random: {
-        auto& rnd_node = state->nodes_random[index];
-
-        std::vector<rt::node_desc_t> ch_nodes;
-        for (auto& ch_desc : rnd_node.nodes) {
-            ch_nodes.push_back(save_node_rec(buf, ctx, state, ch_desc));
+        node_id_t next_node_id = invalid_node_id;
+        for (auto& link : group.links) {
+            if (link.from == node_id) {
+                next_node_id = link.to;
+            }
         }
+        
+        rt_node.next_node = save_node_rec(buf, ctx, state, group, next_node_id);
+        write(buf, res, &rt_node, 1);
 
-        out_index = (uint16_t)ctx->nodes_random.size();
-
-        rt::random_node_t node = {};
-        node.nodes = write(buf, ch_nodes);
-        ctx->nodes_random.push_back(node);
-
-        break;
+        return res.pos;
     }
-    case rt::node_type_e::Sequence: {
-        auto& seq_node = state->nodes_sequence[index];
+    case RANDOM_FNODE_TYPE: {
+        auto& type_data = get_random_node(state, node_id);
 
-        std::vector<rt::node_desc_t> ch_nodes;
-        for (auto& ch_desc : seq_node.nodes) {
-            ch_nodes.push_back(save_node_rec(buf, ctx, state, ch_desc));
+        std::vector<rt::offset_t> dst_nodes(type_data.out_pin_count);
+
+        rt::random_node_t rt_node = {};
+        rt_node.nodes = write(buf, dst_nodes);
+        auto res = write_single(buf, rt_node);
+        cache_group_node_offset(ctx, node_id, res.pos);
+        for (auto& link : group.links) {
+            if (link.from == node_id) {
+                dst_nodes[link.from_pin] = save_node_rec(buf, ctx, state, group, link.to);
+            }
         }
+        write(buf, rt_node.nodes.elements, dst_nodes.data(), dst_nodes.size());
 
-        out_index = (uint16_t)ctx->nodes_sequence.size();
-
-        rt::sequence_node_t node = {};
-        node.nodes = write(buf, ch_nodes);
-        ctx->nodes_sequence.push_back(node);
-
-        break;
-    }
-    case rt::node_type_e::Repeat: {
-        auto& rep_node = state->nodes_repeat[index];
-
-        auto ndesc = save_node_rec(buf, ctx, state, rep_node.node);
-
-        out_index = (uint16_t)ctx->nodes_repeat.size();
-
-        rt::repeat_node_t rt_node = {};
-        rt_node.repeat_count = rep_node.repeat_count;
-        rt_node.node = ndesc;
-        ctx->nodes_repeat.push_back(rt_node);
-
-        break;
+        return res.pos;
     }
     default:
         assert(false);
-        break;
     }
 
-    return {desc.type, out_index};
+    return {};
 }
 
 std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_file_data_provider_ti* fdata_provider, const char* streaming_filename) {
@@ -238,14 +231,15 @@ std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_fil
     std::vector<rt::named_group_t> groups;
     groups.reserve(state->groups.size());
     for (auto& group : state->groups) {
-        auto desc = save_node_rec(buf, &ctx, state, group.node);
+        ctx.saved_group_nodes.clear();
+        rt::offset_t first_node_offset = {};
+        if (group.start_node != invalid_node_id) {
+            first_node_offset = save_node_rec(buf, &ctx, state, group, group.start_node);
+        }
 
         auto fbo_group = make_named_group(buf, 
-            group.name,
-            group.volume,
-            group.cross_fade_time,
-            group.output_bus_index,
-            desc
+            group,
+            first_node_offset
         );
         groups.push_back(fbo_group);
     }

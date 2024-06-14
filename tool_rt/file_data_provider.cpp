@@ -6,7 +6,7 @@
 
 #include "miniaudio_public.h"
 
-using hle_audio::editor::audio_file_data_t;
+using hle_audio::data::audio_file_data_t;
 using hle_audio::rt::const_data_buffer_t;
 
 static uint32_t scan_uint32(const uint8_t** data_ptr) {

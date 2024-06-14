@@ -20,7 +20,7 @@ void init(index_id_list_t& id_list);
 /**
  * get id ready to be used on next node creation
  */
-index_id_t reserve_node_id(index_id_list_t& id_list);
+index_id_t alloc_id(index_id_list_t& id_list);
 void free_id(index_id_list_t& id_list, index_id_t id);
 void store_index(index_id_list_t& id_list, index_id_t id, size_t index);
 inline size_t get_index(const index_id_list_t& id_list, index_id_t id) { return (size_t)id_list[id]; }

@@ -6,7 +6,6 @@ FetchContent_Declare(minimp3
 FetchContent_Populate(minimp3)
 
 add_library(hlea_runtime STATIC
-    src/node_state_stack.cpp
     src/default_allocator.cpp
     src/file_api_vfs_bridge.cpp
     src/decoder_mp3.cpp

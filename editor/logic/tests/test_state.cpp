@@ -1,38 +1,43 @@
 #include "gtest/gtest.h"
 #include "app_logic.h"
+#include "data_state.h"
 
 using namespace hle_audio;
 using namespace hle_audio::editor;
 
-TEST(logic_state, remove_node_with_children)
+TEST(logic_state, remove_group_with_nodes)
 {
     logic_state_t state = {};
-
     init(&state);
 
-    // children nodes have indices less than parent node case
+    create_group(&state, 0);
+    create_node(&state, 0, data::RANDOM_FNODE_TYPE, {});
+    create_node(&state, 0, data::FILE_FNODE_TYPE, {});
+    remove_group(&state, 0);
 
-    node_desc_t desc_0 = {
-        rt::node_type_e::Sequence,
-        reserve_node_id(state.data_state.node_ids)
-    };
-    create_node(&state.data_state, desc_0);
-    node_desc_t desc_1 = {
-        rt::node_type_e::Sequence,
-        reserve_node_id(state.data_state.node_ids)
-    };
-    create_node(&state.data_state, desc_1);
+    ASSERT_TRUE(state.data_state.fnodes_file.is_empty());
+    ASSERT_TRUE(state.data_state.fnodes_random.is_empty());
+}
+
+TEST(logic_state, remove_group_and_undo_start_node)
+{
+    logic_state_t state = {};
+    init(&state);
 
     create_group(&state, 0);
-    create_root_node(&state, 0, rt::node_type_e::Sequence);
+    create_node(&state, 0, data::RANDOM_FNODE_TYPE, {});
+    create_node(&state, 0, data::FILE_FNODE_TYPE, {});
 
-    auto& group_ref = get_group(&state.data_state, 0);
-    auto nodes_ptr = get_child_nodes_ptr_mut(&state.data_state, group_ref.node);
-    nodes_ptr->push_back(desc_0);
-    nodes_ptr->push_back(desc_1);
-    
-    // clear group nodes
-    remove_root_node(&state, 0);
+    // fisrt node should be the start node
+    auto start_node = get_group(&state.data_state, 0).start_node;
+    ASSERT_TRUE(start_node != data::invalid_node_id);
+    auto node_data = get_node_data(&state.data_state, start_node);
+    ASSERT_TRUE(node_data.type == data::RANDOM_FNODE_TYPE);
 
-    ASSERT_TRUE(state.data_state.nodes_sequence.is_empty());
+    remove_group(&state, 0);
+    apply_undo_chain(&state.cmds, &state.data_state);
+
+    // start node must be the same after undo
+    auto start_node_after_undo = get_group(&state.data_state, 0).start_node;
+    ASSERT_TRUE(start_node_after_undo == start_node);
 }

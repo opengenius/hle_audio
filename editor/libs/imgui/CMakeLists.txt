@@ -16,6 +16,7 @@ add_library(${PROJECT_NAME} STATIC
     src/backends/imgui_impl_opengl3.cpp
 
     src/imgui_etx.cpp
+    src/imnodes.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_11)

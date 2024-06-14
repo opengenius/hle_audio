@@ -31,6 +31,7 @@ add_executable(hlea_editor WIN32
     src/main.cpp
     src/app_state.cpp
     src/app_view.cpp
+    src/nodes_view.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/editor.rc # win resource file
 )
 

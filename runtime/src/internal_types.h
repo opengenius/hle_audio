@@ -5,7 +5,6 @@
 #include "rt_types.h"
 #include "streaming_data_source.h"
 #include "buffer_data_source.h"
-#include "node_state_stack.h"
 #include "chunk_streaming_cache.h"
 #include "decoder_mp3.h"
 #include "decoder_pcm.h"
@@ -73,7 +72,7 @@ struct group_data_t {
 
     bool apply_sound_fade_out;
 
-    hle_audio::rt::node_state_stack_t state_stack;
+    hle_audio::rt::offset_t current_node_offset;
 };
 
 struct event_desc_t {
@@ -191,10 +190,3 @@ struct hlea_context_t {
     array_with_size_t<uint16_t, MAX_SOUNDS, uint16_t> unused_decoders_pcm_indices;
 };
 
-struct node_funcs_t {
-    using node_desc_t = hle_audio::rt::node_desc_t;
-
-    memory_layout_t state_mem_layout;
-    node_desc_t (*process_func)(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state);
-};
-node_funcs_t get_node_handler(hle_audio::rt::node_type_e type);

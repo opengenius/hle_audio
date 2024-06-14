@@ -2,10 +2,9 @@
 #include "miniaudio_public.h"
 #include "internal_types.h"
 #include "internal_editor_runtime.h"
+#include <cstdlib>
 
-using hle_audio::rt::node_state_stack_t;
 using hle_audio::rt::named_group_t;
-using hle_audio::rt::node_desc_t;
 using hle_audio::rt::data_buffer_t;
 using hle_audio::rt::file_data_t;
 using hle_audio::rt::node_type_e;
@@ -312,62 +311,34 @@ static const named_group_t* bank_get_group(const hlea_event_bank_t* bank, uint32
     return bank_get(bank, bank->static_data->groups, group_index);
 }
 
-
-static node_desc_t process_node(const hlea_event_bank_t* bank, const node_desc_t& node_desc, void* state) {
-    auto process_func = get_node_handler(node_desc.type).process_func;
-    if (process_func) {
-        return process_func(bank, node_desc, state);
-    }
-
-    return {};
-}
-
-static bool init_and_push_state(node_state_stack_t& stack, const node_desc_t& node_desc) {
-    memory_layout_t layout = get_node_handler(node_desc.type).state_mem_layout;
-    if (layout.size) {
-        push_state(stack, node_desc, layout);
-        // init state memory, (implement init func for something fancy)
-
-        return true;
-    }
-    return false;
-}
-
-static node_desc_t next_node_statefull(node_state_stack_t& stack, const hlea_event_bank_t* bank) {
-    node_desc_t next_node_desc = {};
-    while (next_node_desc.type == node_type_e::None && !is_empty(stack)) {
-        next_node_desc = process_node(bank, top_node_desc(stack), top_state(stack));
-        if (next_node_desc.type == node_type_e::None) pop_up_state(stack);
-    }
-
-    return next_node_desc;
-}
-
 static sound_id_t make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     auto group_sdata = bank_get_group(group.bank, group.group_index);
 
-    node_desc_t next_node_desc = {};
-    
-    if (is_empty(group.state_stack)) {
-        // first run
-        next_node_desc = group_sdata->node;
-    } else {
-        next_node_desc = next_node_statefull(group.state_stack, group.bank);
-    }
+    using hle_audio::rt::node_type_e;
+    using hle_audio::rt::file_node_t;
+    using hle_audio::rt::random_node_t;
 
-    while(next_node_desc.type != node_type_e::None) {
-        // sound node found, interupt traversing, generate sound
-        if (next_node_desc.type == node_type_e::File) {
-            auto file_node = bank_get(group.bank, group.bank->static_data->nodes_file, next_node_desc.index);
+    auto data_ptr = group.bank->data_buffer_ptr;
+
+    while(group.current_node_offset) {
+        hle_audio::rt::offset_typed_t<node_type_e> type_accessor = {group.current_node_offset};
+
+        auto type = type_accessor.get_ptr(data_ptr);
+        if (*type == node_type_e::FILE) {
+            hle_audio::rt::offset_typed_t<file_node_t> file_accessor = {group.current_node_offset};
+            auto file_node = file_accessor.get_ptr(data_ptr);
+
+            group.current_node_offset = file_node->next_node;
+
             return make_sound(ctx, group.bank, group_sdata->output_bus_index, file_node);
-        }
 
-        if (init_and_push_state(group.state_stack, next_node_desc)) {
-            // use stacked node
-            next_node_desc = next_node_statefull(group.state_stack, group.bank);
-        } else {
-            // stateless
-            next_node_desc = process_node(group.bank, next_node_desc, nullptr);
+        } else if (*type == node_type_e::RANDOM) {
+            hle_audio::rt::offset_typed_t<random_node_t> random_accessor = {group.current_node_offset};
+            auto random_node = random_accessor.get_ptr(data_ptr);
+
+            auto index = rand() % random_node->nodes.count;
+
+            group.current_node_offset = random_node->nodes.get(data_ptr, index);
         }
     }
 
@@ -419,9 +390,6 @@ static void start_next_after_current(hlea_context_t* ctx, group_data_t& group) {
 static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
     group.next_sound_id = invalid_sound_id;
 
-    // no state left, leave
-    if (is_empty(group.state_stack)) return;
-
     group.next_sound_id = make_next_sound(ctx, group);
     if (!group.next_sound_id) return;
     
@@ -436,20 +404,18 @@ static void group_make_next_sound(hlea_context_t* ctx, group_data_t& group) {
 static void group_play(hlea_context_t* ctx, const event_desc_t* desc) {
     if (ctx->active_groups_size == MAX_ACTIVE_GROUPS) return;
 
+    auto group_data = bank_get_group(desc->bank, desc->target_index);
+
     group_data_t group = {};
     group.bank = desc->bank;
     group.group_index = desc->target_index;
     group.obj_id = desc->obj_id;
-    // todo: use pooled allocator instead of general one
-    // todo: control size
-    init(group.state_stack, 128, ctx->allocator);
+    group.current_node_offset = group_data->first_node_offset;
 
     group.sound_id = make_next_sound(ctx, group);
     if (group.sound_id) {
         auto sound_data_ptr = get_sound_data(ctx, group.sound_id);
         auto sound = &sound_data_ptr->engine_sound;
-
-        auto group_data = bank_get_group(desc->bank, desc->target_index);
 
         ma_sound_set_volume(sound, group_data->volume);
         if (0 < desc->fade_time) {
@@ -678,9 +644,6 @@ void fire_event(hlea_context_t* ctx, hlea_action_type_e event_type, const event_
 
 static void group_active_release(hlea_context_t* ctx, uint32_t active_index) {
     group_data_t& group = ctx->active_groups[active_index];
-
-    // clean up state data
-    deinit(group.state_stack);
 
     // swap remove
     ctx->active_groups[active_index] = ctx->active_groups[ctx->active_groups_size - 1];

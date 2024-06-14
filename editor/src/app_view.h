@@ -24,6 +24,7 @@ enum class view_action_type_e {
     NODE_ADD,
     NODE_REMOVE,
     NODE_FILE_ASSIGN_SOUND,
+    NODE_MOVED,
 
     EVENT_ADD,
     EVENT_REMOVE,
@@ -57,14 +58,15 @@ struct bus_edit_data_t {
 };
 
 struct node_action_data_t {
-    node_desc_t parent_node_desc;
-    node_desc_t node_desc;
+    data::node_id_t node_id;
+
+    data::vec2_t add_position;
 
     std::variant<
-        rt::node_type_e, // NODE_ADD
-        uint32_t,        // NODE_REMOVE
-        file_node_t,     // NODE_UPDATE
-        node_repeat_t
+        data::flow_node_type_t,  // NODE_ADD
+        uint32_t,         // NODE_REMOVE
+        data::file_flow_node_t, // NODE_UPDATE
+        data::random_flow_node_t
         > action_data;
 };
 
@@ -86,7 +88,7 @@ struct view_state_t {
 
     struct filtered_indices_list_state_t {
         std::vector<size_t> indices;
-        size_t list_index = invalid_index;
+        size_t list_index = data::invalid_index;
 
         size_t get_index(size_t index) {
             // empty indices is considered as no filter
@@ -102,23 +104,24 @@ struct view_state_t {
     */
 
     // groups
-    size_t active_group_index = invalid_index;
-    named_group_t selected_group_state;
+    size_t active_group_index = data::invalid_index;
+    data::named_group_t selected_group_state;
+    size_t selected_group_state_revison;
 
     // event list
     std::string event_filter_str;
-    size_t event_filter_group_index = invalid_index;
+    size_t event_filter_group_index = data::invalid_index;
     size_t groups_size_on_event_filter_group;
     filtered_indices_list_state_t events_filtered_state;
 
     // active event
-    size_t active_event_index = invalid_index;
-    event_t event_state;
+    size_t active_event_index = data::invalid_index;
+    data::event_t event_state;
     size_t event_action_cmd_index;
 
     // sound file list
     const std::vector<std::u8string>* sound_files_u8_names_ptr;
-    size_t selected_sound_file_index = invalid_index;
+    size_t selected_sound_file_index = data::invalid_index;
 
     std::vector<int> output_bus_volumes;
     bus_edit_data_t bus_edit_state = {};
@@ -134,9 +137,12 @@ struct view_state_t {
     // actions
     node_action_data_t node_action = {};
     size_t action_group_index;
+
+    std::vector<data::node_id_t> moved_nodes;
+    std::vector<data::vec2_t> moved_nodes_positions;
 };
 
-view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state);
+view_action_type_e build_view(view_state_t& mut_view_state, const data::data_state_t& data_state);
 
 }
 }

@@ -7,87 +7,36 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/document.h"
 
+#include "data_state_v1.h"
+#include "data_state.h"
+#include "data_keys.h"
+#include "json_utils.inl"
+
 // using rapidjson::StringBuffer;
 using rapidjson::FileWriteStream;
 using rapidjson::PrettyWriter;
 using rapidjson::Document;
 using rapidjson::Value;
 
+static const uint32_t CURRENT_VERSION = 2;
+
 namespace hle_audio {
-namespace editor {
+namespace data {
 
-const auto KEY_NAME = "name";
-const auto KEY_LOOP = "loop";
-const auto KEY_STREAM = "stream";
-const auto KEY_ACTIONS = "actions";
-const auto KEY_TYPE = "type";
-const auto KEY_TARGET_GROUP_INDEX = "target_group_index";
-const auto KEY_FADE_TIME = "fade_time";
-const auto KEY_TIMES = "times";
-const auto KEY_CROSS_FADE_TIME = "cross_fade_time";
-const auto KEY_OUTPUT_BUS_INDEX = "output_bus_index";
-
-static rt::node_type_e node_type_from_str(const char* str) {
-    int i = 0;
-    for (auto name : rt::c_node_type_names) {
-        if (strcmp(name, str) == 0) {
-            return (rt::node_type_e)i;
-        }
-        ++i;
-    }
-    return rt::node_type_e::None;
-}
-
-static rt::action_type_e ActionType_from_str(const char* str) {
-    int i = 0;
-    for (auto name : rt::c_action_type_names) {
-        if (strcmp(name, str) == 0) {
-            return (rt::action_type_e)i;
-        }
-        ++i;
-    }
-    return rt::action_type_e::none;
-}
-
-static bool value_get_opt_bool(const Value& v, const char* key, bool def_value = false) {
-    bool res = def_value;
-    if (v.HasMember(key)) {
-        res = v[key].GetBool();
-    }
-    return res;
-}
-
-static float value_get_opt_float(const Value& v, const char* key, float def_value = 0.0f) {
-    float res = def_value;
-    if (v.HasMember(key)) {
-        res = v[key].GetFloat();
-    }
-    return res;
-}
-
-static unsigned value_get_opt_uint(const Value& v, const char* key, unsigned def_value = 0) {
-    unsigned res = def_value;
-    if (v.HasMember(key)) {
-        res = v[key].GetUint();
-    }
-    return res;
-}
-
-static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
+static node_id_t load_node(data_state_t* state, const rapidjson::Value& v, size_t group_index) {
     assert(v.IsObject());
-    auto node_type = node_type_from_str(v[KEY_TYPE].GetString());
-    node_desc_t res = {
-        node_type,
-        reserve_node_id(state->node_ids)
+    auto node_type = flow_node_type_from_str(v[KEY_TYPE].GetString());
+    vec2_t pos = {
+        v[KEY_POSITION_X].GetInt(),
+        v[KEY_POSITION_Y].GetInt()
     };
-    create_node(state, res);
+
+    node_id_t res_id = create_node(state, group_index, node_type, pos);
     switch (node_type)
     {
-    case rt::node_type_e::None: {
-        break;
-    }
-    case rt::node_type_e::File: {
-        auto& node = get_file_node_mut(state, res.id);
+    case FILE_FNODE_TYPE: {
+        auto& node = get_file_node_mut(state, res_id);
+
         auto& file_v = v["file"];
         node.filename = std::u8string(file_v.GetString(), file_v.GetString() + file_v.GetStringLength());
         node.loop = value_get_opt_bool(v, KEY_LOOP);
@@ -95,21 +44,10 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
 
         break;
     }  
-    case rt::node_type_e::Random:
-    case rt::node_type_e::Sequence: {
-        const auto& nodes_val = v["nodes"];
-        assert(nodes_val.IsArray());
-        for (auto& node_v : nodes_val.GetArray()) {
-            auto ch_desc = load_node_rec(state, node_v);
-            get_child_nodes_ptr_mut(state, res)->push_back(ch_desc);
-        }
-        
-        break;
-    }
-    case rt::node_type_e::Repeat: {
-        auto& node = get_repeat_node_mut(state, res.id);
-        node.repeat_count = value_get_opt_uint(v, KEY_TIMES);
-        node.node = load_node_rec(state, v["node"]);
+    case RANDOM_FNODE_TYPE: {
+        auto& node = get_random_node_mut(state, res_id);
+
+        node.out_pin_count = value_get_opt_uint(v, KEY_OUT_COUNT, 1u);
 
         break;
     }
@@ -118,7 +56,7 @@ static node_desc_t load_node_rec(data_state_t* state, const Value& v) {
         break;
     }
 
-    return res;
+    return res_id;
 }
 
 bool load_store_json(data_state_t* state, const char* json_filename) {
@@ -142,71 +80,117 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
     Document document;
     document.Parse(json_buf.data(), json_buf.size());
 
-    // output buses
-    auto KEY_OUTPUT_BUSES = "output_buses";
-    if (document.HasMember(KEY_OUTPUT_BUSES)) {
-        const auto& output_buses_val = document[KEY_OUTPUT_BUSES];
-        if (output_buses_val.IsArray()) {
-            state->output_buses.clear();
-            for (auto& output_bus_v : output_buses_val.GetArray()) {
-                output_bus_t bus = {};
-                bus.name = output_bus_v[KEY_NAME].GetString();
-                
-                state->output_buses.push_back(bus);
+    auto doc_version = value_get_opt_uint(document, KEY_VERSION, 1u);
+    if (doc_version == 1) {
+        return migrate_from_v1(state, document);
+    } else {
+        //
+        // load current version
+        //
+        assert(doc_version == CURRENT_VERSION);
+
+        // output buses
+        auto KEY_OUTPUT_BUSES = "output_buses";
+        if (document.HasMember(KEY_OUTPUT_BUSES)) {
+            const auto& output_buses_val = document[KEY_OUTPUT_BUSES];
+            if (output_buses_val.IsArray()) {
+                state->output_buses.clear();
+                for (auto& output_bus_v : output_buses_val.GetArray()) {
+                    output_bus_t bus = {};
+                    bus.name = output_bus_v[KEY_NAME].GetString();
+                    
+                    state->output_buses.push_back(bus);
+                }
             }
         }
-    }
 
-    // groups
-    const auto& groups_val = document["groups"];
-    assert(groups_val.IsArray());
-    for (auto& group_v : groups_val.GetArray()) {
-        named_group_t group = {};
+        // groups
+        const auto& groups_val = document[KEY_GROUPS];
+        assert(groups_val.IsArray());
+        for (auto& group_v : groups_val.GetArray()) {
+            {
+                named_group_t group = {};
+                group.name = group_v[KEY_NAME].GetString();
+                group.volume = value_get_opt_float(group_v, KEY_VOLUME, 1.0f);
+                group.cross_fade_time = value_get_opt_float(group_v, KEY_CROSS_FADE_TIME, 0.0f);
+                group.output_bus_index = value_get_opt_uint(group_v, KEY_OUTPUT_BUS_INDEX, 0);
+                
+                state->groups.push_back(group);
+            }
 
-        group.name = group_v[KEY_NAME].GetString();
-        group.volume = value_get_opt_float(group_v, "volume", 1.0f);
-        group.cross_fade_time = value_get_opt_float(group_v, KEY_CROSS_FADE_TIME, 0.0f);
-        group.output_bus_index = value_get_opt_uint(group_v, KEY_OUTPUT_BUS_INDEX, 0);
-        group.node = load_node_rec(state, group_v["node"]); 
-        
-        state->groups.push_back(group);
-    }
+            auto group_index = state->groups.size() - 1;
+            
+            // nodes
+            const auto& nodes_val = group_v[KEY_NODES];
+            assert(nodes_val.IsArray());
+            for (auto& node_v : nodes_val.GetArray()) {
+                load_node(state, node_v, group_index);
+            }
 
-    // events
-    const auto& events_v = document["events"];
-    assert(events_v.IsArray());
-    for (auto& event_v : events_v.GetArray()) {
-        event_t event = {};
-        event.name = event_v[KEY_NAME].GetString();
+            auto& group_ref = state->groups[group_index];
+            if (group_ref.nodes.size()) {
+                group_ref.start_node = group_ref.nodes[group_v[KEY_START].GetUint()];
+            }
 
-        const auto& actions_v = event_v[KEY_ACTIONS];
-        assert(actions_v.IsArray());
-        for (auto& action_v : actions_v.GetArray()) {
-            rt::action_t action = {};
-            action.type = ActionType_from_str(action_v[KEY_TYPE].GetString());
-            action.target_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
-            action.fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
+            // links
+            const auto& links_val = group_v[KEY_LINKS];
+            assert(links_val.IsArray());
+            for (auto& link_v : links_val.GetArray()) {
+                link_t l = {};
+                l.from = group_ref.nodes[link_v[KEY_FROM].GetUint()];
+                l.from_pin = link_v[KEY_FROM_PIN].GetUint();
+                l.to = group_ref.nodes[link_v[KEY_TO].GetUint()];
+                l.to_pin = link_v[KEY_TO_PIN].GetUint();
 
-            event.actions.push_back(action);
+                group_ref.links.push_back(l);
+            }
         }
 
-        state->events.push_back(event);
+        // events
+        const auto& events_v = document["events"];
+        assert(events_v.IsArray());
+        for (auto& event_v : events_v.GetArray()) {
+            event_t event = {};
+            event.name = event_v[KEY_NAME].GetString();
+
+            const auto& actions_v = event_v[KEY_ACTIONS];
+            assert(actions_v.IsArray());
+            for (auto& action_v : actions_v.GetArray()) {
+                rt::action_t action = {};
+                action.type = rt::action_type_from_str(action_v[KEY_TYPE].GetString());
+                action.target_index = action_v[KEY_TARGET_GROUP_INDEX].GetUint();
+                action.fade_time = value_get_opt_float(action_v, KEY_FADE_TIME);
+
+                event.actions.push_back(action);
+            }
+
+            state->events.push_back(event);
+        }
     }
+
 
     return true;
 }
 
-template <typename Writer>
-static void write_node_rec(Writer& writer,
-        const data_state_t* state, const node_desc_t& desc) {
+static void write_node(PrettyWriter<FileWriteStream>& writer,
+        const data_state_t* state, const node_id_t& node_id) {
+
+    auto& node = state->fnodes[node_id];
+
     writer.StartObject();
 
     writer.String(KEY_TYPE);
-    writer.String(node_type_name(desc.type));
-    switch (desc.type)
+    writer.String(flow_node_type_name(node.type));
+
+    writer.String(KEY_POSITION_X);
+    writer.Int(node.position.x);
+    writer.String(KEY_POSITION_Y);
+    writer.Int(node.position.y);
+
+    switch (node.type)
     {
-    case rt::node_type_e::File: {
-        auto& file_node = get_file_node(state, desc.id);
+    case FILE_FNODE_TYPE: {
+        auto& file_node = get_file_node(state, node_id);
         writer.String("file");
         writer.String((const char*)file_node.filename.c_str(), file_node.filename.length());
 
@@ -220,28 +204,46 @@ static void write_node_rec(Writer& writer,
         }
         break;
     }
-    case rt::node_type_e::Repeat: {
-        auto& node = get_repeat_node(state, desc.id);
-        writer.String("node");
-        write_node_rec(writer, state, node.node);
-        if (node.repeat_count) {
-            writer.String(KEY_TIMES);
-            writer.Uint(node.repeat_count);
-        }
-        break;
-    }
-    default:
+    case RANDOM_FNODE_TYPE: {
+        auto& random_node = get_random_node(state, node_id);
+        writer.String(KEY_OUT_COUNT);
+        writer.Uint(random_node.out_pin_count);
         break;
     }
 
-    if (auto nodes_ptr = get_child_nodes_ptr(state, desc)) {
-        writer.String("nodes");
-        writer.StartArray();
-        for (auto& ch_desc : *nodes_ptr) {
-            write_node_rec(writer, state, ch_desc);
-        }
-        writer.EndArray();
+    default:
+        assert(false && "unhandled type");
+        break;
     }
+
+    writer.EndObject();
+}
+
+static uint16_t node_in_group_index(const named_group_t& group, node_id_t node_id) {
+    for (auto& it_node_id : group.nodes) {
+        if (it_node_id == node_id) {
+            auto it_index = &it_node_id - group.nodes.data();
+            return it_index;
+        }
+    }
+
+    assert(false && "no node found, invalid link!");
+    return ~0u;
+}
+
+static void write_link(PrettyWriter<FileWriteStream>& writer,
+        const data_state_t* state, const named_group_t& group, const link_t& link) {
+    writer.StartObject();
+
+    writer.String(KEY_FROM);
+    writer.Uint(node_in_group_index(group, link.from));
+    writer.String(KEY_FROM_PIN);
+    writer.Uint(link.from_pin);
+    
+    writer.String(KEY_TO);
+    writer.Uint(node_in_group_index(group, link.to));
+    writer.String(KEY_TO_PIN);
+    writer.Uint(link.to_pin);
 
     writer.EndObject();
 }
@@ -257,6 +259,9 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
     // store
     writer.StartObject();
 
+    writer.String(KEY_VERSION);
+    writer.Uint(CURRENT_VERSION);
+
     // output buses
     writer.String("output_buses");
     writer.StartArray();
@@ -271,7 +276,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
     writer.EndArray();
 
     // groups
-    writer.String("groups");
+    writer.String(KEY_GROUPS);
     writer.StartArray();
     for (auto& group : state->groups) {
         writer.StartObject();
@@ -282,7 +287,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
 
         // volume:float = 1.0;
         if (group.volume < 1.0f) {
-            writer.String("volume");
+            writer.String(KEY_VOLUME);
             
             double volume = group.volume;
             volume = round(volume * 1000) / 1000;
@@ -304,9 +309,28 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
             writer.String(KEY_OUTPUT_BUS_INDEX);
             writer.Uint(group.output_bus_index);
         }
+
+        if (group.nodes.size()) {
+            writer.String(KEY_START);
+            writer.Uint(node_in_group_index(group, group.start_node));
+        }
         
-        writer.String("node");
-        write_node_rec(writer, state, group.node);
+        // nodes
+        writer.String(KEY_NODES);
+        writer.StartArray();
+        for (auto& node_id : group.nodes) {
+            write_node(writer, state, node_id);
+        }
+        writer.EndArray();
+
+        // links
+        writer.String(KEY_LINKS);
+        writer.StartArray();
+        for (auto& link : group.links) {
+            write_link(writer, state, group, link);
+        }
+        writer.EndArray();
+        
         writer.EndObject();
     }
     writer.EndArray();

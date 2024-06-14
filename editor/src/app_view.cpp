@@ -1,16 +1,19 @@
 #include "app_view.h"
-// #include "cmd_stack.h"
-#include "data_types.h"
+#include "data_state.h"
 #include "imgui.h"
+#include "imnodes.h"
+#include "imgui_ext.h"
+#include "nodes_view.h"
+#include "attribute_id_utils.inl"
 
-namespace ImGuiExt {
-bool Splitter(bool split_vertically, float thickness, float* size1, float* size2, float min_size1, float min_size2, float splitter_long_axis_size = -1.0f);
-}
+
+using hle_audio::data::data_state_t;
+using hle_audio::data::pin_counts_t;
+using hle_audio::data::node_id_t;
+using hle_audio::data::link_t;
 
 namespace hle_audio {
 namespace editor {
-
-struct command_stack_t;
 
 static bool TreeNodeWithRemoveButton(uint32_t node_index, const char* label, bool* remove_pressed) {
     bool expanded = ImGui::TreeNodeEx((void*)(intptr_t)node_index, ImGuiTreeNodeFlags_AllowItemOverlap | ImGuiTreeNodeFlags_DefaultOpen, label);
@@ -22,165 +25,6 @@ static bool TreeNodeWithRemoveButton(uint32_t node_index, const char* label, boo
     ImGui::PopID();
 
     return expanded;
-}
-
-static void build_node_tree(const data_state_t& state, const view_state_t& view_state,
-                const node_desc_t& parent_node_desc,
-                uint32_t node_index, const node_desc_t& node_desc,
-                node_action_data_t& out_action, view_action_type_e& out_action_type) {
-    bool add_node = false;
-    bool removePressed = false;
-
-    switch (node_desc.type)
-    {
-    case rt::node_type_e::None: {
-        ImGui::Text("None");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Add...")) {
-            // add node popup
-            add_node = true;
-        }
-        break;
-    }
-    case rt::node_type_e::File: {
-        auto& file_node = get_file_node(&state, node_desc.id);
-
-        {
-            auto file_name = (const char*)file_node.filename.c_str(); //"None";
-            
-            if (TreeNodeWithRemoveButton(node_index, file_name, &removePressed)) {
-                ImGui::BeginDisabled(view_state.selected_sound_file_index == invalid_index);
-                if (ImGui::SmallButton("Use selected sound file")) {
-                    out_action_type = view_action_type_e::NODE_FILE_ASSIGN_SOUND;
-                    out_action.node_desc = node_desc;
-                }
-                ImGui::EndDisabled();
-
-                bool loop_state = file_node.loop;
-                if (ImGui::Checkbox("loop", &loop_state)) {
-                    auto file_node_copy = file_node;
-                    file_node_copy.loop = loop_state;
-
-                    out_action_type = view_action_type_e::NODE_UPDATE;
-                    out_action.node_desc = node_desc;
-                    out_action.action_data = file_node_copy;
-                }
-
-                bool stream_state = file_node.stream;
-                if (ImGui::Checkbox("stream", &stream_state)) {
-                    auto file_node_copy = file_node;
-                    file_node_copy.stream = stream_state;
-
-                    out_action_type = view_action_type_e::NODE_UPDATE;
-                    out_action.node_desc = node_desc;
-                    out_action.action_data = file_node_copy;
-                }
-
-                ImGui::TreePop();
-            }
-        }
-        
-        break;
-    }
-    case rt::node_type_e::Random:
-    case rt::node_type_e::Sequence:
-        if (TreeNodeWithRemoveButton(node_index, node_type_name(node_desc.type), &removePressed)) {
-            auto node_ptr = get_child_nodes_ptr(&state, node_desc);
-            uint32_t child_index = 0;
-            for (auto& child_desc : *node_ptr) {
-                build_node_tree(state, view_state, node_desc, child_index++, child_desc, out_action, out_action_type);
-            }
-            if (ImGui::SmallButton("Add...")) {
-                add_node = true;
-            }
-            ImGui::TreePop();
-        }
-        break;
-    case rt::node_type_e::Repeat:
-        if (TreeNodeWithRemoveButton(node_index, node_type_name(node_desc.type), &removePressed)) {
-            auto& repeat_node = get_repeat_node(&state, node_desc.id);
-
-            static node_desc_t changing_node = {};
-            static uint16_t changing_value;
-
-            uint16_t repeat_count = repeat_node.repeat_count;
-            uint16_t* repeat_count_ptr = (node_desc.type == changing_node.type && node_desc.id == changing_node.id) ? &changing_value : &repeat_count;
-            if (ImGui::DragScalar("times", ImGuiDataType_U16, repeat_count_ptr)) {
-                changing_node = node_desc;
-                changing_value = *repeat_count_ptr;
-            }
-
-            if (ImGui::IsItemDeactivatedAfterEdit() && 
-                    changing_value != repeat_node.repeat_count) {
-                changing_node = {};
-
-                auto repeat_node_copy = repeat_node;
-                repeat_node_copy.repeat_count = changing_value;
-
-                out_action_type = view_action_type_e::NODE_UPDATE;
-                out_action.node_desc = node_desc;
-                out_action.action_data = repeat_node_copy;
-            }
-
-            if (repeat_node.node.type != rt::node_type_e::None) {
-                build_node_tree(state, view_state, node_desc, 0, repeat_node.node, out_action, out_action_type);
-            } else if (ImGui::SmallButton("Add...")) {
-                add_node = true;
-            }
-            ImGui::TreePop();
-        }
-        break;
-    default:
-        ImGui::Text("Default");
-        break;
-    }
-
-    if (add_node) {
-        out_action.node_desc = node_desc;
-        ImGui::OpenPopup("create_node_popup");
-    }
-
-    if (out_action.node_desc.id == node_desc.id) {
-        if (ImGui::BeginPopup("create_node_popup")) {
-            for (int i = 1; i < std::size(rt::c_node_type_names); i++) {
-                if (ImGui::Selectable(rt::c_node_type_names[i])) {
-                    out_action_type = view_action_type_e::NODE_ADD;
-                    out_action.action_data = (rt::node_type_e)i;
-                }
-            }
-            ImGui::EndPopup();
-        }
-    }
-
-    if (removePressed) {
-        out_action_type = view_action_type_e::NODE_REMOVE;
-        out_action.parent_node_desc = parent_node_desc;
-        out_action.action_data = node_index;
-    }
-}
-
-namespace ImGui_std {
-
-static int InputTextCallback(ImGuiInputTextCallbackData* data) {
-    std::string* str = (std::string*)data->UserData;
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
-    {
-        // Resize string callback
-        // If for some reason we refuse the new length (BufTextLen) and/or capacity (BufSize) we need to set them back to what we want.
-        IM_ASSERT(data->Buf == str->c_str());
-        str->resize(data->BufTextLen);
-        data->Buf = (char*)str->c_str();
-    }
-    return 0;
-}
-
-bool InputText(const char* label, const char* hint, std::string* str, ImGuiInputTextFlags flags = 0) {
-    IM_ASSERT((flags & ImGuiInputTextFlags_CallbackResize) == 0);
-    flags |= ImGuiInputTextFlags_CallbackResize;
-
-    return ImGui::InputTextWithHint(label, hint, (char*)str->c_str(), str->capacity() + 1, flags, InputTextCallback, str);
-}
-
 }
 
 static view_action_type_e process_view_menu(const view_state_t& view_state) {
@@ -305,13 +149,59 @@ static void ClippedListWithAddRemoveButtonsFiltered(size_t elem_count, float sca
         add_pressed, remove_pressed, double_clicked);
 }
 
+static uint16_t get_node_in_pin_count(const data_state_t& data_state, size_t node_index) {
+    return 1;
+}
+
+static link_t attributes_to_link(const data_state_t& data_state, int start_attr, int end_attr) {
+    uint32_t start_node = start_attr & 0xFFFF;
+    uint32_t start_pin = uint32_t(start_attr) >> 16;
+    uint32_t end_node = end_attr & 0xFFFF;
+    uint32_t end_pin = uint32_t(end_attr) >> 16;
+
+    auto in_pin_count = get_node_in_pin_count(data_state, start_node);
+    start_pin -= in_pin_count;
+
+    link_t res = {};
+    res.from = node_id_t(start_node);
+    res.from_pin = start_pin;
+    res.to = node_id_t(end_node);
+    res.to_pin = end_pin;
+    return res;
+}
+
+static void group_add_link_unique(data::named_group_t& group, const link_t& link) {
+    // keep single out link
+    for (size_t i = 0; i < group.links.size(); ++i) {
+        auto& it_l = group.links[i];
+        if (it_l.from == link.from && 
+                it_l.from_pin == link.from_pin) {
+            group.links[i] = link;
+            return;
+        }
+    }
+    // not found existing link to replace, so add new one
+    group.links.push_back(link);
+}
+
+static data::vec2_t to_grid_position(ImVec2 pos) {
+    auto grid_spacing = ImNodes::GetStyle().GridSpacing;
+    pos.x /= grid_spacing;
+    pos.y /= grid_spacing;
+
+    return {
+        int16_t(pos.x),
+        int16_t(pos.y)
+    };
+}
+
 static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
                 view_action_type_e& action) {
     auto& data_group = get_group(&data_state, mut_view_state.active_group_index);
 
     auto& group_state = mut_view_state.selected_group_state;
 
-    ImGui_std::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
+    ImGuiExt::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
     if (ImGui::IsItemDeactivatedAfterEdit() &&
             data_group.name != group_state.name) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
@@ -346,16 +236,188 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
-    ImGui::Text("Node tree:");
-    build_node_tree(data_state, mut_view_state, invalid_node_desc, 0, group_state.node, mut_view_state.node_action, action);
-
-    ImGui::Separator();
-    if (ImGui::Button("<<< Filter events")) {
+    ImGui::Text("Node graph:");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("<<< Filter events")) {
         mut_view_state.event_filter_group_index = mut_view_state.action_group_index;
         mut_view_state.groups_size_on_event_filter_group = data_state.groups.size();
         mut_view_state.select_events_tab = true;
         action = view_action_type_e::EVENT_FILTER;
     }
+    auto editor_panning = ImNodes::EditorContextGetPanning();
+    if (editor_panning.x != 0.0f || editor_panning.y != 0.0f) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset panning")) {
+            ImNodes::EditorContextResetPanning({});
+        }
+    }
+    auto selected_count = ImNodes::NumSelectedNodes();
+    if (selected_count) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove selected node")) {
+            mut_view_state.moved_nodes.resize(selected_count);
+            static_assert(sizeof(data::node_id_t) == sizeof(int));
+            ImNodes::GetSelectedNodes((int*)(mut_view_state.moved_nodes.data()));
+            ImNodes::ClearNodeSelection();
+
+            action = view_action_type_e::NODE_REMOVE;
+        }
+    }
+    if (ImNodes::NumSelectedNodes() == 1) {
+        data::node_id_t selected_node_id = {};
+        ImNodes::GetSelectedNodes((int*)&selected_node_id);
+
+        if (selected_node_id != group_state.start_node) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Make start")) {
+                group_state.start_node = selected_node_id;
+                action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+            }
+        }
+    }
+
+    ImGui::BeginChild("Node editor");
+    ImNodes::BeginNodeEditor();
+
+    const bool open_popup = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+                                    ImNodes::IsEditorHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+    
+    static data::vec2_t click_pos = {};
+    if (!ImGui::IsAnyItemHovered() && open_popup) {
+        ImGui::OpenPopup("create_node_popup");
+
+        auto mouse_pos = ImGui::GetMousePos();
+        auto editor_screen_pos = ImGui::GetCursorScreenPos();
+        mouse_pos.x -= editor_screen_pos.x;
+        mouse_pos.y -= editor_screen_pos.y;
+        auto editor_panning = ImNodes::EditorContextGetPanning();
+        mouse_pos.x -= editor_panning.x;
+        mouse_pos.y -= editor_panning.y;
+
+        click_pos = to_grid_position(mouse_pos);
+    }
+
+    if (ImGui::BeginPopup("create_node_popup")) {
+
+        static const char* const node_type_names[] = {
+            "File",
+            "Random"
+        };
+        static const data::flow_node_type_t node_types[] = {
+            data::FILE_FNODE_TYPE,
+            data::RANDOM_FNODE_TYPE
+        };
+        for (int i = 0; i < std::size(node_type_names); i++) {
+            if (ImGui::Selectable(node_type_names[i])) {
+                action = view_action_type_e::NODE_ADD;
+                mut_view_state.node_action.add_position = click_pos;
+                mut_view_state.node_action.action_data = node_types[i];
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    static size_t prev_group_state_revison = {};
+    if (prev_group_state_revison != mut_view_state.selected_group_state_revison) {
+        prev_group_state_revison = mut_view_state.selected_group_state_revison;
+
+        auto grid_spacing = ImNodes::GetStyle().GridSpacing;
+        for (auto node_index : group_state.nodes) {
+            auto& node = data_state.fnodes[node_index];
+            
+            ImVec2 pos = {node.position.x * grid_spacing, node.position.y * grid_spacing};
+            ImNodes::SetNodeGridSpacePos(node_index, pos);
+        }
+    }
+
+    for (auto& node_id : group_state.nodes) {
+        auto& node = data_state.fnodes[node_id];
+
+        bool is_start_node = (node_id == group_state.start_node);
+
+        ImNodes::BeginNode(node_id);
+
+        build_node_view_desc_t desc = {};
+        desc.node_id = node_id;
+        desc.start_node = is_start_node;
+        desc.out_data = &mut_view_state.node_action;
+
+        view_action_type_e node_action = {};
+        if (node.type == data::FILE_FNODE_TYPE) {
+            node_action = build_node_view(get_file_node(&data_state, node_id), desc);
+        } else if (node.type == data::RANDOM_FNODE_TYPE) {
+            node_action = build_node_view(get_random_node(&data_state, node_id), desc);
+        }
+
+        if (node_action != view_action_type_e::NONE) {
+            action = node_action;
+
+            auto& out_action  = mut_view_state.node_action;
+            out_action.node_id = node_id;
+        }
+
+        ImNodes::EndNode();
+    }
+    for (int i = 0; i < group_state.links.size(); ++i) {
+        auto& link = group_state.links[i];
+
+        auto in_pin_count = get_node_in_pin_count(data_state, link.from);
+        ImNodes::Link(i, 
+            to_attribute_id_out(in_pin_count, link.from, link.from_pin), 
+            to_attribute_id_in(link.to, link.to_pin));
+    }
+
+    ImNodes::EndNodeEditor();
+
+    int start_attr, end_attr;
+    if (ImNodes::IsLinkCreated(&start_attr, &end_attr)) {
+        auto link = attributes_to_link(data_state, start_attr, end_attr);
+        group_add_link_unique(group_state, link);
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+
+    // bool linkStarted = false;
+    // if (ImNodes::IsLinkStarted(&start_attr)) {
+    //     linkStarted = true;
+    // }
+
+    int link_id;
+    if (ImNodes::IsLinkDestroyed(&link_id)) {
+        group_state.links.erase(group_state.links.begin() + link_id);
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+
+    // todo: add node with drop link
+    // if (ImNodes::IsLinkDropped(&start_attr, false)) {
+    //     static int qwe = 0;
+    //     qwe = start_attr;
+    // }
+
+    if (ImNodes::IsNodesDragStopped()) {
+        auto moved_count = ImNodes::NumSelectedNodes();
+        if (moved_count) {
+            mut_view_state.moved_nodes.resize(moved_count);
+            static_assert(sizeof(data::node_id_t) == sizeof(int));
+            ImNodes::GetSelectedNodes((int*)(mut_view_state.moved_nodes.data()));
+
+            auto fisrst_moved_node = mut_view_state.moved_nodes[0];
+
+            auto new_node_pos = to_grid_position(ImNodes::GetNodeGridSpacePos(fisrst_moved_node));
+            
+            auto& node = data_state.fnodes[fisrst_moved_node];
+            if (node.position.x != new_node_pos.x ||
+                    node.position.y != new_node_pos.y) {
+                mut_view_state.moved_nodes_positions.clear();
+                for (auto node_id : mut_view_state.moved_nodes) {
+                    auto new_pos = to_grid_position(ImNodes::GetNodeGridSpacePos(node_id));
+                    mut_view_state.moved_nodes_positions.push_back(new_pos);
+                }
+                action = view_action_type_e::NODE_MOVED;
+            }
+        }
+    }
+
+    ImGui::EndChild();
 }
 
 view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_state_t& data_state) {
@@ -372,7 +434,7 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
         }
 
         if (ImGui::BeginPopup("show_bus_popup")) {
-            ImGui_std::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
+            ImGuiExt::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
             if (ImGui::IsItemDeactivatedAfterEdit() &&
                     mut_view_state.bus_edit_state.name != bus.name) {
                 action = view_action_type_e::BUS_RENAME;
@@ -534,17 +596,17 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     mut_view_state.focus_selected_event = true;
                 }
                 ImGui::SameLine();
-                if (ImGui_std::InputText("Filter", "enter text here", 
+                if (ImGuiExt::InputText("Filter", "enter text here", 
                         &mut_view_state.event_filter_str, ImGuiInputTextFlags_AutoSelectAll)) {
                     action = view_action_type_e::EVENT_FILTER;
                 }
 
                 // group filter
-                if (mut_view_state.event_filter_group_index != invalid_index) {
+                if (mut_view_state.event_filter_group_index != data::invalid_index) {
                     auto& group = data_state.groups[mut_view_state.event_filter_group_index];
                     
                     if (ImGui::SmallButton("x")) {
-                        mut_view_state.event_filter_group_index = invalid_index;
+                        mut_view_state.event_filter_group_index = data::invalid_index;
                         action = view_action_type_e::EVENT_FILTER;
                     }
                     ImGui::SameLine();
@@ -598,22 +660,10 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     ImGui::SameLine();
     ImGui::BeginChild("Properties pane", ImVec2(-wav_list_width - style.WindowPadding.x, 0), true);
 
-    auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
-    mut_view_state.apply_edit_focus_on_group = false;
-    if (active_group_index != invalid_index) {
-        if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
-            if (apply_edit_focus_on_group) {
-                ImGui::SetKeyboardFocusHere();
-            }
-
-            build_selected_group_view(mut_view_state, data_state, action);
-        }
-    }
-
     auto apply_edit_focus_on_event = mut_view_state.apply_edit_focus_on_event;
     mut_view_state.apply_edit_focus_on_event = false;
             
-    if (mut_view_state.active_event_index != invalid_index) {
+    if (mut_view_state.active_event_index != data::invalid_index) {
         if (ImGui::CollapsingHeader("Event Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (apply_edit_focus_on_event) {
                 ImGui::SetKeyboardFocusHere();
@@ -622,7 +672,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             auto& ds_event = data_state.events[mut_view_state.active_event_index];
 
             auto& event_state = mut_view_state.event_state;
-            ImGui_std::InputText("name##event_name", nullptr, &event_state.name, ImGuiInputTextFlags_AutoSelectAll);
+            ImGuiExt::InputText("name##event_name", nullptr, &event_state.name, ImGuiInputTextFlags_AutoSelectAll);
             if (ImGui::IsItemDeactivatedAfterEdit() &&
                     event_state.name != ds_event.name) {
                 action = view_action_type_e::EVENT_UPDATE;
@@ -647,17 +697,17 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     auto current_index = (int)ev_action.type;
                     ImGui::Combo("##type", &current_index, rt::c_action_type_names, sizeof(rt::c_action_type_names) / sizeof(*rt::c_action_type_names));
                     if (current_index != (int)ev_action.type) {
-                        bool prev_type_group = is_action_target_group(ev_action.type);
+                        bool prev_type_group = data::is_action_target_group(ev_action.type);
 
                         ev_action.type = (rt::action_type_e)current_index;
 
                         // reset group index if type is not group anymore
-                        if (prev_type_group && !is_action_target_group(ev_action.type)) {
+                        if (prev_type_group && !data::is_action_target_group(ev_action.type)) {
                             ev_action.target_index = 0;
 
                         // assign an active group if type changed to group target
-                        } else if(!prev_type_group && is_action_target_group(ev_action.type)) {
-                            if (active_group_index != invalid_index) {
+                        } else if(!prev_type_group && data::is_action_target_group(ev_action.type)) {
+                            if (active_group_index != data::invalid_index) {
                                 ev_action.target_index = active_group_index;
                             }
                         }
@@ -679,8 +729,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                             action = view_action_type_e::EVENT_REMOVE_ACTION;
                         }
                         // group target actions
-                        if (is_action_target_group(ev_action.type)) {
-                            if (active_group_index != invalid_index && // no assign if not active group
+                        if (data::is_action_target_group(ev_action.type)) {
+                            if (active_group_index != data::invalid_index && // no assign if not active group
                                 active_group_index != ev_action.target_index && // no assign if active group is the same
                                     ImGui::MenuItem("Assign active group")) {
                                 ev_action.target_index = active_group_index;
@@ -699,11 +749,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     ImGui::SameLine();
                     
                     // action target
-                    if (is_action_target_group(ev_action.type)) {
+                    if (data::is_action_target_group(ev_action.type)) {
                         auto& group = data_state.groups[ev_action.target_index];
                         const char* target_label = group.name.c_str();
                         ImGui::Text(target_label);
-                    } else if (is_action_type_target_bus(ev_action.type)) {
+                    } else if (data::is_action_type_target_bus(ev_action.type)) {
 
                         int current_index = ev_action.target_index;
                         auto getter = [](void* data, int n, const char** out_str) {
@@ -760,6 +810,18 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         }
     }
 
+    auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
+    mut_view_state.apply_edit_focus_on_group = false;
+    if (active_group_index != data::invalid_index) {
+        if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (apply_edit_focus_on_group) {
+                ImGui::SetKeyboardFocusHere();
+            }
+
+            build_selected_group_view(mut_view_state, data_state, action);
+        }
+    }
+
     ImGui::EndChild();
 
     ImGui::SameLine();
@@ -787,7 +849,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         if (ImGui::SmallButton("Refresh")) {
             action = view_action_type_e::REFRESH_SOUND_LIST;
         }
-        ImGui::BeginDisabled(mut_view_state.selected_sound_file_index == invalid_index);
+        ImGui::BeginDisabled(mut_view_state.selected_sound_file_index == data::invalid_index);
         if (ImGui::SmallButton("Play")) {
             action = view_action_type_e::SOUND_PLAY;
         }

@@ -1,6 +1,14 @@
 #include "app_logic.h"
+#include "data_state.h"
 #include "commands.h"
 #include <cassert>
+
+using hle_audio::data::named_group_t;
+using hle_audio::data::event_t;
+using hle_audio::data::node_id_t;
+using hle_audio::data::output_bus_t;
+using hle_audio::data::file_flow_node_t;
+using hle_audio::data::random_flow_node_t;
 
 namespace hle_audio {
 namespace editor {
@@ -24,7 +32,7 @@ void add_event_action(logic_state_t* state, size_t event_index, size_t target_gr
     auto event = state->data_state.events[event_index];
 
     rt::action_t act = {};
-    if (target_group_index != invalid_index) {
+    if (target_group_index != data::invalid_index) {
         act.target_index = target_group_index;
     }
     
@@ -55,54 +63,24 @@ void create_group(logic_state_t* state, size_t group_index) {
     execute_cmd_first(state, std::move(cmd));
 }
 
-static void perform_remove_node_rec(logic_state_t* state, const node_desc_t& node_desc) {
-    // detach children and remove recursively
-    auto nodes_ptr = get_child_nodes_ptr(&state->data_state, node_desc);
-    if (nodes_ptr) {
-        while (nodes_ptr->size()) {
-            auto child_desc = nodes_ptr->back();
-
-            auto cmd = std::make_unique<node_remove_child_cmd_t>();
-            cmd->node = node_desc;
-            cmd->child_index = nodes_ptr->size() - 1;
-            execute_cmd(state, std::move(cmd));
-
-            perform_remove_node_rec(state, child_desc);
-        }
-    }
-
-    // reset params
-    if (node_desc.type == rt::node_type_e::File) {
-        execute_cmd(state, 
-            std::make_unique<node_file_update_cmd_t>(node_desc.id, file_node_t{}));
-    } else if (node_desc.type == rt::node_type_e::Repeat) {
-        auto node = get_repeat_node(&state->data_state, node_desc.id);
-
-        auto cmd = std::make_unique<node_repeat_update_cmd_t>(
-            node_desc.id, node_repeat_t{}
-        );
-        execute_cmd(state, std::move(cmd));
-
-        perform_remove_node_rec(state, node.node);
-    }
-    // no params to reset yet
-    // else if (node_desc.type() == NodeType_Random) {   
-    // } else if (node_desc.type() == NodeType_Sequence) {
-    // }
-
-    execute_cmd(state, std::make_unique<node_destroy_cmd_t>(node_desc));
-}
-
-static void perform_remove_group_root_node_chained(logic_state_t* state, size_t group_index) {
+static void perform_remove_node(logic_state_t* state, size_t group_index, data::node_id_t node) {
     auto& data_state = state->data_state;
 
-    auto& group_ptr = get_group(&data_state, group_index);
-    if (group_ptr.node.type != rt::node_type_e::None) {
-        auto node_desc = group_ptr.node;
+    // reset node state
+    auto ndata = get_node_data(&data_state, node);
+    if (ndata.type == data::FILE_FNODE_TYPE) {
         execute_cmd(state, 
-            std::make_unique<group_update_node_cmd_t>(group_index, invalid_node_desc));
-        perform_remove_node_rec(state, node_desc);
-    }  
+                std::make_unique<node_file_update_cmd_t>(node, data::file_flow_node_t{}));
+
+    } else if (ndata.type == data::RANDOM_FNODE_TYPE) {
+        execute_cmd(state, 
+                std::make_unique<node_random_update_cmd_t>(node, data::random_flow_node_t{}));
+
+    }
+
+    // destroy node
+    execute_cmd(state, 
+            std::make_unique<node_destroy_cmd_t>(group_index, node));
 }
 
 static void perform_remove_event(logic_state_t* state, size_t index) {
@@ -119,15 +97,18 @@ static void perform_remove_event(logic_state_t* state, size_t index) {
  */
 void remove_group(logic_state_t* state, size_t group_index) {
     auto& data_state = state->data_state;
+
+    auto nodes = data_state.groups[group_index].nodes;
     
-    // reset params command to restore on undo
-    // first command, every next one to be chained
+    // reset group params command to restore on undo
     execute_cmd_first(state, 
             std::make_unique<group_update_cmd_t>(group_index, named_group_t{}));
 
     // remove nodes commands
-    perform_remove_group_root_node_chained(state, group_index);
-
+    for (auto& node_id : nodes) {
+        perform_remove_node(state, group_index, node_id);
+    }
+    
     // remove events
     auto& events = data_state.events;
     for (size_t event_index = 0; event_index < events.size(); ++event_index) {
@@ -142,100 +123,71 @@ void remove_group(logic_state_t* state, size_t group_index) {
         std::make_unique<group_remove_cmd_t>(group_index));
 }
 
-static node_desc_t execute_cmd_create_node(logic_state_t* state, rt::node_type_e type) {
-    node_desc_t desc = {
-        type,
-        reserve_node_id(state->data_state.node_ids)
-    };
-        
-    auto cmd = std::make_unique<node_create_cmd_t>(desc);
-    execute_cmd_first(state, std::move(cmd));
-
-    return desc;
+void create_node(logic_state_t* state, size_t group_index, data::flow_node_type_t type, const data::vec2_t& position) {
+    execute_cmd_first(state, 
+            std::make_unique<node_create_cmd_t>(group_index, type, position));
 }
 
-void create_root_node(logic_state_t* state, size_t group_index, rt::node_type_e type) {
-    auto desc = execute_cmd_create_node(state, type);
-    auto cmd = std::make_unique<group_update_node_cmd_t>(group_index, desc);
-    execute_cmd(state, std::move(cmd));
-}
-
-void create_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type) {
-    auto nodes_ptr = get_child_nodes_ptr(&state->data_state, node_desc);
-    assert(nodes_ptr);
-
-    auto child_desc = execute_cmd_create_node(state, type);
-
-    auto cmd = std::make_unique<node_add_child_cmd_t>();
-    cmd->node = node_desc;
-    cmd->child_node = child_desc;
-    cmd->child_index = nodes_ptr->size();
-    execute_cmd(state, std::move(cmd));
-}
-
-void create_repeat_node(logic_state_t* state, const node_desc_t& node_desc, rt::node_type_e type) {
-    auto node = get_repeat_node(&state->data_state, node_desc.id);
-    node.node = execute_cmd_create_node(state, type);
-
-    auto cmd = std::make_unique<node_repeat_update_cmd_t>(
-        node_desc.id, node
-    );
-    execute_cmd(state, std::move(cmd));
-}
-
-void remove_root_node(logic_state_t* state, size_t group_index) {
-    // start commands
-    push_chain_start(&state->cmds);
-
-    // remove nodes commands
-    perform_remove_group_root_node_chained(state, group_index);
-}
-
-void remove_node(logic_state_t* state, const node_desc_t& parent_node_desc, size_t node_index) {
-    if (parent_node_desc.type == rt::node_type_e::Repeat) {
-        auto node = get_repeat_node(&state->data_state, parent_node_desc.id);
-
-        auto child_desc = node.node;
-        node.node = {};
-
-        auto cmd = std::make_unique<node_repeat_update_cmd_t>(parent_node_desc.id, node);
-        execute_cmd_first(state, std::move(cmd));
-        perform_remove_node_rec(state, child_desc);
-    } else {
-        // detach child and remove recursively
-        auto nodes_ptr = get_child_nodes_ptr(&state->data_state, parent_node_desc);
-        if (nodes_ptr) {
-            if  (node_index < nodes_ptr->size()) {
-                auto child_desc = nodes_ptr->at(node_index);
-
-                auto cmd = std::make_unique<node_remove_child_cmd_t>();
-                cmd->node = parent_node_desc;
-                cmd->child_index = node_index;
-                execute_cmd_first(state, std::move(cmd));
-
-                perform_remove_node_rec(state, child_desc);
-            }
+static void remove_node_links(named_group_t& group, data::node_id_t node) {
+    for (int i = 0; i < group.links.size(); ++i) {
+        auto l = group.links[i];
+        if (l.from == node || l.to == node) {
+            group.links[i] = group.links.back();
+            group.links.pop_back();
+            --i;
         }
     }
 }
 
-void assign_file_node_file(logic_state_t* state, const node_desc_t& node_desc, const std::u8string& filename) {
-    auto node = get_file_node(&state->data_state, node_desc.id);
+void remove_nodes(logic_state_t* state, size_t group_index, std::span<const data::node_id_t> node_ids) {
+    auto& data_state = state->data_state;
+
+    push_chain_start(&state->cmds);
+
+    // remove links
+    auto group = data_state.groups[group_index];
+    for (auto node : node_ids) {
+        remove_node_links(group, node);
+    }
+    execute_cmd(state, 
+                std::make_unique<group_update_cmd_t>(group_index, group));
+
+    for (auto node : node_ids) {
+        perform_remove_node(state, group_index, node);
+    }
+}
+
+void assign_file_node_file(logic_state_t* state, node_id_t node_id, const std::u8string& filename) {
+    auto node = get_file_node(&state->data_state, node_id);
 
     node.filename = filename;
 
-    auto cmd = std::make_unique<node_file_update_cmd_t>(node_desc.id, node);
+    auto cmd = std::make_unique<node_file_update_cmd_t>(node_id, node);
     execute_cmd_first(state, std::move(cmd));
 }
 
-void update_file_node(logic_state_t* state, const node_desc_t& node_desc, const file_node_t& data) {
-    auto cmd = std::make_unique<node_file_update_cmd_t>(node_desc.id, data);
+void update_file_node(logic_state_t* state, node_id_t node_id, const file_flow_node_t& data) {
+    auto cmd = std::make_unique<node_file_update_cmd_t>(node_id, data);
     execute_cmd_first(state, std::move(cmd));
 }
 
-void update_repeat_node(logic_state_t* state, const node_desc_t& node_desc, const node_repeat_t& data) {
-    auto cmd = std::make_unique<node_repeat_update_cmd_t>(node_desc.id, data);
+void update_random_node(logic_state_t* state, node_id_t node_id, const random_flow_node_t& data) {
+    auto cmd = std::make_unique<node_random_update_cmd_t>(node_id, data);
     execute_cmd_first(state, std::move(cmd));
+}
+
+void move_nodes(logic_state_t* state, std::span<const data::node_id_t> node_ids, std::span<const data::vec2_t> positions) {
+    assert(node_ids.size() == positions.size());
+
+    push_chain_start(&state->cmds);
+
+    for (auto& node_id : node_ids) {
+        auto it_index = &node_id - node_ids.data();
+
+        execute_cmd(state, 
+                std::make_unique<node_move_cmd_t>(node_id, positions[it_index]));
+    }
+    
 }
 
 void create_event(logic_state_t* state, size_t index) {

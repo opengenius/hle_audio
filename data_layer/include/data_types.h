@@ -6,39 +6,9 @@
 #include "rt_types.h"
 
 namespace hle_audio {
-namespace editor {
+namespace data {
 
-struct node_desc_t {
-    rt::node_type_e type;
-    utils::index_id_t id;
-};
-
-struct file_node_t {
-    std::u8string filename;
-    bool loop = false;
-    bool stream = false;
-};
-
-struct node_random_t {
-    std::vector<node_desc_t> nodes;
-};
-
-struct node_sequence_t {
-    std::vector<node_desc_t> nodes;
-};
-
-struct node_repeat_t {
-    uint16_t repeat_count;
-    node_desc_t node;
-};
-
-struct named_group_t {
-    std::string name = {};
-    float volume = 1.0f;
-    float cross_fade_time = 0.0f;
-    uint8_t output_bus_index = 0;
-    node_desc_t node = {};
-};
+enum node_id_t : uint32_t;
 
 struct event_t {
     std::string name{};
@@ -49,22 +19,86 @@ struct output_bus_t {
     std::string name;
 };
 
+enum flow_node_type_t : uint8_t;
+
 const size_t invalid_index = ~0;
 const auto invalid_file_index = (uint16_t)~0u;
-const auto invalid_node_desc = node_desc_t{rt::node_type_e::None, utils::invalid_node_id};
+const node_id_t invalid_node_id = {};
+const flow_node_type_t invalid_node_type = {};
+
+static const flow_node_type_t FILE_FNODE_TYPE = flow_node_type_t(1);
+static const flow_node_type_t RANDOM_FNODE_TYPE = flow_node_type_t(2);
+
+static const char* c_flow_node_type_names[] = {
+    "",
+    "File",
+    "Random"
+};
+static const char* flow_node_type_name(flow_node_type_t type) {
+    return c_flow_node_type_names[uint8_t(type)];
+}
+static flow_node_type_t flow_node_type_from_str(const char* str) {
+    int i = 0;
+    for (auto name : c_flow_node_type_names) {
+        if (strcmp(name, str) == 0) {
+            return (flow_node_type_t)i;
+        }
+        ++i;
+    }
+    return invalid_node_type;
+}
+
+struct file_flow_node_t {
+    std::u8string filename;
+    bool loop = false;
+    bool stream = false;
+};
+
+struct random_flow_node_t {
+    uint16_t out_pin_count;
+};
+
+struct link_t {
+    node_id_t from;
+    uint16_t from_pin;
+    node_id_t to;
+    uint16_t to_pin;
+};
+
+struct named_group_t {
+    std::string name = {};
+    float volume = 1.0f;
+    float cross_fade_time = 0.0f;
+    uint8_t output_bus_index = 0;
+    node_id_t start_node;
+    std::vector<node_id_t> nodes;
+    std::vector<link_t> links;
+};
+
+struct vec2_t {
+    int16_t x;
+    int16_t y;
+};
+
+struct common_flow_node_t {
+    vec2_t position;
+
+    flow_node_type_t type;
+    uint32_t index;
+};
+
+struct pin_counts_t {
+    uint16_t in_count;
+    uint16_t out_count;
+};
 
 struct data_state_t {
-
-    // stable node ids to not update indices on node list mutation
-    utils::index_id_list_t node_ids;
-
-    utils::sparse_vector<file_node_t> nodes_file;
-    utils::sparse_vector<node_random_t> nodes_random;
-    utils::sparse_vector<node_sequence_t> nodes_sequence;
-    utils::sparse_vector<node_repeat_t> nodes_repeat;
-
     std::vector<named_group_t> groups;
     std::vector<event_t> events;
+
+    utils::sparse_vector<common_flow_node_t> fnodes;
+    utils::sparse_vector<file_flow_node_t> fnodes_file;
+    utils::sparse_vector<random_flow_node_t> fnodes_random;
 
     std::vector<output_bus_t> output_buses;
 };
@@ -93,71 +127,7 @@ static bool is_event_target_group(const event_t& event, size_t group_index) {
     return false;
 }
 
-/**
- * Data state API
- */
-
-void init(data_state_t* state);
-
-void create_group(data_state_t* state, size_t group_index);
-void remove_group(data_state_t* state, size_t group_index);
-inline const named_group_t& get_group(const data_state_t* state, size_t group_index) {
-    return state->groups[group_index];
-}
-inline named_group_t& get_group_mut(data_state_t* state, size_t group_index) {
-    return state->groups[group_index];
-}
-
-void create_node(data_state_t* state, const node_desc_t& desc);
-void destroy_node(data_state_t* state, const node_desc_t& desc);
-
-const file_node_t& get_file_node(const data_state_t* state, utils::index_id_t id);
-file_node_t& get_file_node_mut(data_state_t* state, utils::index_id_t id);
-
-const node_repeat_t& get_repeat_node(const data_state_t* state, utils::index_id_t id);
-node_repeat_t& get_repeat_node_mut(data_state_t* state, utils::index_id_t id);
-
-//
-// data indexed getters
-//
-
-static void get_ptr_by_index(data_state_t& state, size_t index, event_t** out_ptr) {
-    *out_ptr = &state.events[index];
-}
-
-static void get_ptr_by_index(data_state_t& state, size_t index, output_bus_t** out_ptr) {
-    *out_ptr = &state.output_buses[index];
-}
-
-static void get_ptr_by_index(data_state_t& state, utils::index_id_t index, node_repeat_t** out_ptr) {
-    *out_ptr = &get_repeat_node_mut(&state, index);
-}
-
-static void get_ptr_by_index(data_state_t& state, utils::index_id_t index, file_node_t** out_ptr) {
-    *out_ptr = &get_file_node_mut(&state, index);
-}
-
 /////////////////////////////////////////////////////////////////////////////////////////
-
-static const std::vector<node_desc_t>* get_child_nodes_ptr(const data_state_t* state, const node_desc_t& node) {
-    auto node_index = get_index(state->node_ids, node.id);
-
-    switch (node.type)
-    {       
-    case rt::node_type_e::Random:
-        return &state->nodes_random[node_index].nodes;
-    case rt::node_type_e::Sequence:
-        return &state->nodes_sequence[node_index].nodes;
-    default:
-        // no child nodes
-        break;
-    }
-    return nullptr;
-}
-
-static std::vector<node_desc_t>* get_child_nodes_ptr_mut(data_state_t* state, const node_desc_t& node) {
-    return const_cast<std::vector<node_desc_t>*>(get_child_nodes_ptr(state, node));
-}
 
 struct audio_file_data_t {
     rt::file_data_t::meta_t meta;

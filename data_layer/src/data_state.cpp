@@ -1,14 +1,16 @@
-#include "data_types.h"
+#include "data_state.h"
 #include <cassert>
 
 namespace hle_audio {
-namespace editor {
+namespace data {
 
 using utils::index_id_list_t;
 using utils::index_id_t;
 
 void init(data_state_t* state) {
-    init(state->node_ids);
+    assert(state->fnodes.is_empty());
+    auto reserved_invalid_node = state->fnodes.add({});
+    assert(reserved_invalid_node == invalid_node_id);
 
     output_bus_t bus = {};
     bus.name = "Default";
@@ -57,27 +59,16 @@ void remove_group(data_state_t* state, size_t group_index) {
     }
 }
 
-void create_node(data_state_t* state, const node_desc_t& desc) {
+node_id_t create_node(data_state_t* state, size_t group_index, flow_node_type_t type, vec2_t position) {
     size_t node_index = 0;
-    switch (desc.type)
+    switch (type)
     {
-    case rt::node_type_e::None: {
+    case FILE_FNODE_TYPE: {
+        node_index = state->fnodes_file.add({});
         break;
     }
-    case rt::node_type_e::File: {
-        node_index = state->nodes_file.add({});
-        break;
-    }
-    case rt::node_type_e::Random: {
-        node_index = state->nodes_random.add({});
-        break;
-    }
-    case rt::node_type_e::Sequence: {
-        node_index = state->nodes_sequence.add({});
-        break;
-    }
-    case rt::node_type_e::Repeat: {
-        node_index = state->nodes_repeat.add({});
+    case RANDOM_FNODE_TYPE: {
+        node_index = state->fnodes_random.add({});
         break;
     }
     default:
@@ -85,32 +76,47 @@ void create_node(data_state_t* state, const node_desc_t& desc) {
         break;
     }
 
-    store_index(state->node_ids, desc.id, node_index);
+    common_flow_node_t fnode = {};
+    fnode.type = type;
+    fnode.position = position;
+    fnode.index = node_index;
+    auto node_id = node_id_t(state->fnodes.add(fnode));
+
+    auto& group = state->groups[group_index];
+    group.nodes.push_back(node_id);
+
+    if (group.start_node == invalid_node_id) {
+        group.start_node = node_id;
+    }
+
+    return node_id;
 }
 
-void destroy_node(data_state_t* state, const node_desc_t& desc) {
-    auto node_index = (size_t)state->node_ids[desc.id];
-    free_id(state->node_ids, desc.id);
+void destroy_node(data_state_t* state, size_t group_index, node_id_t node_id) {
 
-    switch (desc.type)
+    auto& group = state->groups[group_index];
+    for (size_t i = 0; i < group.nodes.size(); ++i) {
+        if (group.nodes[i] == node_id) {
+            group.nodes[i] = group.nodes.back();
+            group.nodes.pop_back();
+            break;
+        }
+    }
+    if (group.start_node == node_id) {
+        group.start_node = group.nodes.size() ? group.nodes[0] : invalid_node_id;
+    }
+
+    auto fnode = state->fnodes[node_id];
+    state->fnodes.remove(node_id);
+
+    switch (fnode.type)
     {
-    case rt::node_type_e::None: {
+    case FILE_FNODE_TYPE: {
+        state->fnodes_file.remove(fnode.index);
         break;
     }
-    case rt::node_type_e::File: {
-        state->nodes_file.remove(node_index);
-        break;
-    }
-    case rt::node_type_e::Random: {
-        state->nodes_random.remove(node_index);
-        break;
-    }
-    case rt::node_type_e::Sequence: {
-        state->nodes_sequence.remove(node_index);
-        break;
-    }
-    case rt::node_type_e::Repeat: {
-        state->nodes_repeat.remove(node_index);
+    case RANDOM_FNODE_TYPE: {
+        state->fnodes_random.remove(fnode.index);
         break;
     }
     default:
@@ -119,22 +125,22 @@ void destroy_node(data_state_t* state, const node_desc_t& desc) {
     }
 }
 
-const file_node_t& get_file_node(const data_state_t* state, index_id_t id) {
-    auto node_index = (size_t)state->node_ids[id];
-    return state->nodes_file[node_index];
+const file_flow_node_t& get_file_node(const data_state_t* state, node_id_t id) {
+    auto node_index = get_node_data(state, id).index;
+    return state->fnodes_file[node_index];
 }
 
-file_node_t& get_file_node_mut(data_state_t* state, index_id_t id) {
-    return const_cast<file_node_t&>(get_file_node(state, id));
+file_flow_node_t& get_file_node_mut(data_state_t* state, node_id_t id) {
+    return const_cast<file_flow_node_t&>(get_file_node(state, id));
 }
 
-const node_repeat_t& get_repeat_node(const data_state_t* state, utils::index_id_t id) {
-    auto node_index = (size_t)state->node_ids[id];
-    return state->nodes_repeat[node_index];
+const random_flow_node_t& get_random_node(const data_state_t* state, node_id_t id) {
+    auto node_index = get_node_data(state, id).index;
+    return state->fnodes_random[node_index];
 }
 
-node_repeat_t& get_repeat_node_mut(data_state_t* state, utils::index_id_t id) {
-    return const_cast<node_repeat_t&>(get_repeat_node(state, id));
+random_flow_node_t& get_random_node_mut(data_state_t* state, node_id_t id) {
+    return const_cast<random_flow_node_t&>(get_random_node(state, id));
 }
 
 }

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+#include <cstring>
 
 namespace hle_audio {
 namespace rt {
@@ -68,49 +69,26 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 5;
+static const uint32_t STORE_BLOB_VERSION = 6;
 
 enum class node_type_e : uint8_t {
-    None,
-    File,
-    Random,
-    Sequence,
-    Repeat
+    FILE,
+    RANDOM
 };
-
-static const char* const c_node_type_names[] = {
-    "None",
-    "File",
-    "Random",
-    "Sequence",
-    "Repeat"
-};
-
-static const char* node_type_name(node_type_e type) {
-    return c_node_type_names[(size_t)type];
-}
 
 struct file_node_t {
+    node_type_e type = node_type_e::FILE;
+
     uint32_t file_index;
     uint8_t loop;
-};
 
-struct node_desc_t {
-    node_type_e type;
-    uint16_t index;
+    offset_t next_node;
 };
 
 struct random_node_t {
-    array_view_t<node_desc_t> nodes;
-};
+    node_type_e type = node_type_e::RANDOM;
 
-struct sequence_node_t {
-    array_view_t<node_desc_t> nodes;
-};
-
-struct repeat_node_t {
-    uint16_t repeat_count;
-    node_desc_t node;
+    array_view_t<offset_t> nodes;
 };
 
 struct named_group_t {
@@ -118,7 +96,7 @@ struct named_group_t {
     float volume = 1.0;
     float cross_fade_time = 0.0;
     uint8_t output_bus_index = 0;
-    node_desc_t node;
+    offset_t first_node_offset;
 };
 
 enum class action_type_e : uint8_t {
@@ -151,6 +129,17 @@ static const char* const c_action_type_names[] = {
 
 static const char* action_type_name(action_type_e type) {
     return c_action_type_names[(size_t)type];
+}
+
+static rt::action_type_e action_type_from_str(const char* str) {
+    int i = 0;
+    for (auto name : rt::c_action_type_names) {
+        if (strcmp(name, str) == 0) {
+            return (rt::action_type_e)i;
+        }
+        ++i;
+    }
+    return rt::action_type_e::none;
 }
 
 struct action_t {
@@ -187,11 +176,6 @@ struct file_data_t {
 };
 
 struct store_t {
-    array_view_t<file_node_t> nodes_file;
-    array_view_t<random_node_t> nodes_random;
-    array_view_t<sequence_node_t> nodes_sequence;
-    array_view_t<repeat_node_t> nodes_repeat;
-
     array_view_t<named_group_t> groups;
     array_view_t<event_t> events;
 

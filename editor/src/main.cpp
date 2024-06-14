@@ -1,6 +1,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "imnodes.h"
 #include <cstdio>
 #include <cmath>
 
@@ -64,6 +65,7 @@ int main(int argc, char** argv)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImNodes::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
@@ -72,16 +74,27 @@ int main(int argc, char** argv)
     // ImGui::StyleColorsDark();
     // ImGui::StyleColorsClassic();
     ImGui::StyleColorsLight();
+    ImNodes::StyleColorsLight();
     // ImGui::GetStyle().Colors[ImGuiCol_Button].w = 1.0f;
+
+    ImNodes::GetStyle().Flags |= ImNodesStyleFlags_GridSnapping;
+    ImNodes::GetIO().LinkDetachWithModifierClick.Modifier = &ImGui::GetIO().KeyCtrl;
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
+    float xscale, yscale;
+    glfwGetMonitorContentScale(glfwGetPrimaryMonitor(), &xscale, &yscale);
+
     // Load Fonts
-    float SCALE = 1.75f;
+    float SCALE = xscale;
+    // SCALE = 2.5f;
     io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
     ImGui::GetStyle().ScaleAllSizes(SCALE);
+    ImNodes::GetStyle().GridSpacing *= SCALE;
+    ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
+    ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
 
     auto app_state = hle_audio::editor::create_app_state(SCALE);
     hle_audio::editor::init_with_data(app_state, json_filename, sounds_path);
@@ -137,6 +150,7 @@ int main(int argc, char** argv)
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImNodes::DestroyContext();
     ImGui::DestroyContext();
 
     glfwDestroyWindow(window);

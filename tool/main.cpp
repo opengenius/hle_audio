@@ -1,7 +1,6 @@
-#include "data_types.h"
+#include "data_state.h"
 #include "file_data_provider.h"
 
-using namespace hle_audio::editor;
 using namespace hle_audio::data;
 
 int main(int argc, char** argv) {
@@ -15,7 +14,7 @@ int main(int argc, char** argv) {
     const char* sounds_path = argv[4];
 
     data_state_t state = {};
-    init(state.node_ids);
+    init(&state);
 
     if (!load_store_json(&state, json_filename)) {
         fprintf(stderr, "Couldn't load data from json!\n");

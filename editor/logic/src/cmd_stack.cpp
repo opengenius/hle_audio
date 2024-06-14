@@ -1,6 +1,8 @@
 #include "cmd_stack.h"
 #include <cassert>
 
+using hle_audio::data::data_state_t;
+
 namespace hle_audio {
 namespace editor {
 
