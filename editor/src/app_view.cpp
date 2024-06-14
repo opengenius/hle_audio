@@ -280,43 +280,9 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
     ImNodes::BeginNodeEditor();
 
     const bool open_popup = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-                                    ImNodes::IsEditorHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+                            ImNodes::IsEditorHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+    auto editor_screen_pos = ImGui::GetCursorScreenPos();
     
-    static data::vec2_t click_pos = {};
-    if (!ImGui::IsAnyItemHovered() && open_popup) {
-        ImGui::OpenPopup("create_node_popup");
-
-        auto mouse_pos = ImGui::GetMousePos();
-        auto editor_screen_pos = ImGui::GetCursorScreenPos();
-        mouse_pos.x -= editor_screen_pos.x;
-        mouse_pos.y -= editor_screen_pos.y;
-        auto editor_panning = ImNodes::EditorContextGetPanning();
-        mouse_pos.x -= editor_panning.x;
-        mouse_pos.y -= editor_panning.y;
-
-        click_pos = to_grid_position(mouse_pos);
-    }
-
-    if (ImGui::BeginPopup("create_node_popup")) {
-
-        static const char* const node_type_names[] = {
-            "File",
-            "Random"
-        };
-        static const data::flow_node_type_t node_types[] = {
-            data::FILE_FNODE_TYPE,
-            data::RANDOM_FNODE_TYPE
-        };
-        for (int i = 0; i < std::size(node_type_names); i++) {
-            if (ImGui::Selectable(node_type_names[i])) {
-                action = view_action_type_e::NODE_ADD;
-                mut_view_state.node_action.add_position = click_pos;
-                mut_view_state.node_action.action_data = node_types[i];
-            }
-        }
-        ImGui::EndPopup();
-    }
-
     static size_t prev_group_state_revison = {};
     if (prev_group_state_revison != mut_view_state.selected_group_state_revison) {
         prev_group_state_revison = mut_view_state.selected_group_state_revison;
@@ -415,6 +381,45 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
                 action = view_action_type_e::NODE_MOVED;
             }
         }
+    }
+
+    static data::vec2_t click_pos = {};
+    int hovered_node_id = {};
+    int hovered_pin_id = {};
+    if (!ImGui::IsAnyItemHovered() &&
+        !ImNodes::IsNodeHovered(&hovered_node_id) && 
+        !ImNodes::IsPinHovered(&hovered_pin_id) &&
+        open_popup) {
+        ImGui::OpenPopup("create_node_popup");
+
+        auto mouse_pos = ImGui::GetMousePos();
+        mouse_pos.x -= editor_screen_pos.x;
+        mouse_pos.y -= editor_screen_pos.y;
+        auto editor_panning = ImNodes::EditorContextGetPanning();
+        mouse_pos.x -= editor_panning.x;
+        mouse_pos.y -= editor_panning.y;
+
+        click_pos = to_grid_position(mouse_pos);
+    }
+
+    if (ImGui::BeginPopup("create_node_popup")) {
+
+        static const char* const node_type_names[] = {
+            "File",
+            "Random"
+        };
+        static const data::flow_node_type_t node_types[] = {
+            data::FILE_FNODE_TYPE,
+            data::RANDOM_FNODE_TYPE
+        };
+        for (int i = 0; i < std::size(node_type_names); i++) {
+            if (ImGui::Selectable(node_type_names[i])) {
+                action = view_action_type_e::NODE_ADD;
+                mut_view_state.node_action.add_position = click_pos;
+                mut_view_state.node_action.action_data = node_types[i];
+            }
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::EndChild();

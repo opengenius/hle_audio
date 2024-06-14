@@ -55,7 +55,7 @@ struct file_flow_node_t {
 };
 
 struct random_flow_node_t {
-    uint16_t out_pin_count;
+    uint16_t out_pin_count = 2;
 };
 
 struct link_t {
