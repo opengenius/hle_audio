@@ -184,7 +184,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
 
     // no chunk in cache found, get unused one
     auto free_index = pop_front(&cache.free_chunks);
-    if (free_index == ~0u) return res;
+    if (free_index == uint16_t(~0u)) return res;
 
     // erase chunk index as new chunk is being prepared
     auto& ch_ref = cache.chunks[free_index];
@@ -221,7 +221,7 @@ chunk_request_result_t acquire_chunk(chunk_streaming_cache_t& cache, const chunk
     read_op.chunk_index = free_index;
     ++new_ch.use_count;
 
-    assert(cache.pending_reads_count < std::size(cache.pending_reads));
+    assert(cache.pending_reads_count < MAX_POOL_CHUNKS); // std::size(cache.pending_reads) = MAX_POOL_CHUNKS
     cache.pending_reads[cache.pending_reads_count++] = read_op;
 
     cache.chunks[free_index] = new_ch;

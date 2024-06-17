@@ -66,7 +66,7 @@ constexpr bool is_power_of_2(size_t v) {
 
 static uint16_t to_request_index(uint32_t pos) {
     static_assert(is_power_of_2(MAX_READ_REQUESTS), "here MAX_READ_REQUESTS is expected to be power of 2");
-    static_assert(MAX_READ_REQUESTS < std::numeric_limits<uint16_t>::max());
+    static_assert(MAX_READ_REQUESTS < std::numeric_limits<uint16_t>::max(), "MAX_READ_REQUESTS should fit within uint16_t");
 
     return pos & (MAX_READ_REQUESTS - 1);
 }

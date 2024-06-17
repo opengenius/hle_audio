@@ -27,8 +27,8 @@ static node_id_t load_node(data_state_t* state, const rapidjson::Value& v, size_
     assert(v.IsObject());
     auto node_type = flow_node_type_from_str(v[KEY_TYPE].GetString());
     vec2_t pos = {
-        v[KEY_POSITION_X].GetInt(),
-        v[KEY_POSITION_Y].GetInt()
+        int16_t(v[KEY_POSITION_X].GetInt()),
+        int16_t(v[KEY_POSITION_Y].GetInt())
     };
 
     node_id_t res_id = create_node(state, group_index, node_type, pos);

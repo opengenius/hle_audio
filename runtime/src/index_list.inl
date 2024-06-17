@@ -62,7 +62,7 @@ static void erase(index_list_t* list, uint16_t in_index) {
 static uint16_t pop_front(index_list_t* list) {
     auto head = list->entries[HEAD_INDEX];
     // empty
-    if (head.next == HEAD_INDEX) return ~0u;
+    if (head.next == HEAD_INDEX) return uint16_t(~0u);
 
     auto res = head.next - 1;
     erase(list, res);

@@ -6,6 +6,7 @@
 
 #include <unordered_map>
 #include <string>
+#include <vector>
 #include "file_utils.inl"
 
 namespace hle_audio {
