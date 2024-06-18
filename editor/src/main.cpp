@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 
 #include "app_state.h"
+#include "DroidSans.cpp"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -91,7 +92,8 @@ int main(int argc, char** argv)
     float SCALE = xscale;
     // SCALE = 1.0f;
     // SCALE = 2.5f;
-    io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
+    // io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
+    io.Fonts->AddFontFromMemoryCompressedBase85TTF(DroidSans_compressed_data_base85, floorf(13.0f * SCALE));
     ImGui::GetStyle().ScaleAllSizes(SCALE);
     ImNodes::GetStyle().GridSpacing *= SCALE;
     ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
