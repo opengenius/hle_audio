@@ -89,11 +89,14 @@ int main(int argc, char** argv)
 
     // Load Fonts
     float SCALE = xscale;
+    // SCALE = 1.0f;
     // SCALE = 2.5f;
     io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
     ImGui::GetStyle().ScaleAllSizes(SCALE);
     ImNodes::GetStyle().GridSpacing *= SCALE;
     ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
+    ImNodes::GetStyle().NodePadding.x = 3.0f * SCALE;
+    ImNodes::GetStyle().NodePadding.y = 3.0f * SCALE;
     ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
 
     auto app_state = hle_audio::editor::create_app_state(SCALE);
