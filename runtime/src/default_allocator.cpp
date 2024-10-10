@@ -5,7 +5,7 @@
 namespace hle_audio {
 
 static void* default_malloc_allocate(void* udata, size_t size, size_t alignment) {
-    assert(alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+    assert(alignment <= alignof(std::max_align_t));
     return malloc(size);
     // todo: no aligned_alloc on windows
     // return std::aligned_alloc(alignment, size);
