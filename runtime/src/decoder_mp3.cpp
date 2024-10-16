@@ -390,7 +390,7 @@ static void mp3dec_flush(void* state) {
     flush(dec);
 }
 
-constexpr decoder_ti init_mp3_decoder_vt() {
+static const decoder_ti g_mp3_decoder_vt = []() {
     decoder_ti vt = {};
     vt.release_consumed_inputs = mp3dec_release_consumed_inputs;
     vt.queue_input = mp3dec_queue_input;
@@ -399,9 +399,7 @@ constexpr decoder_ti init_mp3_decoder_vt() {
     vt.flush = mp3dec_flush;
 
     return vt;
-}
-
-static const decoder_ti g_mp3_decoder_vt = init_mp3_decoder_vt();
+}();
 
 decoder_t cast_to_decoder(mp3_decoder_t* dec) {
     decoder_t res = {};

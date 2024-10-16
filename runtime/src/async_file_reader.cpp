@@ -10,10 +10,9 @@
 
 #include "miniaudio_public.h"
 
-using namespace std::chrono_literals;
-
 static const bool ENABLE_DEBUG_READ_DELAY = false;
-static const auto DEBUG_READ_DELAY = 2000ms;
+static const auto DEBUG_READ_DELAY = std::chrono::milliseconds(2000);
+static const auto REQUESTS_WAIT_TIME = std::chrono::milliseconds(1);
 
 namespace hle_audio {
 namespace rt {
@@ -150,7 +149,7 @@ void stop_async_reading(async_file_reader_t* reader, async_file_handle_t afile) 
     // todo: consider non-blocking solution, waiting read per file
     auto wp = async_read_token_t(reader->read_request_indices.write_pos.load());
     while (check_request_running(reader, wp)) {
-        std::this_thread::sleep_for(1ms);
+        std::this_thread::sleep_for(REQUESTS_WAIT_TIME);
     }
     
     reader->opened_files_freed[reader->opened_files_freed_count++] = afile;
@@ -164,7 +163,7 @@ async_read_token_t request_read(async_file_reader_t* reader, const async_read_re
     while (true) {
         while (!can_write(reader->read_request_indices, MAX_READ_REQUESTS)) {
             // read_requests is full, wait
-            std::this_thread::sleep_for(1ms);
+            std::this_thread::sleep_for(REQUESTS_WAIT_TIME);
             // consider non-blocking solution: return invalid handle or fail code
         }
 

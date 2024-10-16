@@ -116,7 +116,7 @@ static void pcm_dec_flush(void* state) {
     flush(dec);
 }
 
-constexpr decoder_ti init_wav_decoder_vt() {
+static const decoder_ti g_wav_decoder_vt = []() {
     decoder_ti vt = {};
     vt.release_consumed_inputs = pcm_dec_release_consumed_inputs;
     vt.queue_input = pcm_dec_queue_input;
@@ -125,9 +125,7 @@ constexpr decoder_ti init_wav_decoder_vt() {
     vt.flush = pcm_dec_flush;
 
     return vt;
-}
-
-static const decoder_ti g_wav_decoder_vt = init_wav_decoder_vt();
+}();
 
 decoder_t cast_to_decoder(pcm_decoder_t* dec) {
     decoder_t res = {};
