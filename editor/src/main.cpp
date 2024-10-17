@@ -90,10 +90,15 @@ int main(int argc, char** argv)
 
     // Load Fonts
     float SCALE = xscale;
+    float FONT_SCALE = SCALE;
+#if defined(__APPLE__)
+    SCALE = 1.0f;
+    io.FontGlobalScale = 1.0f / FONT_SCALE;
+#endif
     // SCALE = 1.0f;
     // SCALE = 2.5f;
     // io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
-    io.Fonts->AddFontFromMemoryCompressedBase85TTF(DroidSans_compressed_data_base85, floorf(13.0f * SCALE));
+    io.Fonts->AddFontFromMemoryCompressedBase85TTF(DroidSans_compressed_data_base85, floorf(13.0f * FONT_SCALE));
     ImGui::GetStyle().ScaleAllSizes(SCALE);
     ImNodes::GetStyle().GridSpacing *= SCALE;
     ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
