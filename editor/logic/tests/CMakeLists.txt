@@ -10,11 +10,9 @@ enable_testing()
 # Libraries
 ################################
 
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG        e2239ee6043f73722e7aa812a459f54a28552929 #release-1.11.0
-  GIT_SHALLOW    ON
+FetchContent_Declare(googletest
+  # 1.15.2
+  URL https://github.com/google/googletest/archive/b514bdc898e2951020cbdca1304b75f5950d1f59.zip
 )
 
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
@@ -25,7 +23,7 @@ FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 set(LIBS  
-  gtest_main
+  GTest::gtest_main
   hlea_editor_logic
 )
 
