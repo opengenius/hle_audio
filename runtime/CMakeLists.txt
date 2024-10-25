@@ -23,7 +23,6 @@ target_link_libraries(hlea_runtime
 PRIVATE
     common_private
     hlea_rt_libs
-PUBLIC
     runtime_data_types
 )
 
@@ -44,5 +43,6 @@ if (HLEA_BUILD_EDITOR)
         hlea_runtime
     PRIVATE
         hlea_rt_libs
+        runtime_data_types
     )
 endif()
