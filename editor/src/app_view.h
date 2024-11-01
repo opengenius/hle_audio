@@ -88,6 +88,8 @@ struct view_state_t {
 
     bool option_select_group_for_event = true;
 
+    bool make_node_file_assign_action = false;
+
     struct filtered_indices_list_state_t {
         std::vector<size_t> indices;
         size_t list_index = data::invalid_index;

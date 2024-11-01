@@ -12,6 +12,10 @@ using hle_audio::data::pin_counts_t;
 using hle_audio::data::node_id_t;
 using hle_audio::data::link_t;
 
+
+const char* DND_SOUND_FILE_INDEX = "DND_SOUND_FILE_INDEX";
+
+
 namespace hle_audio {
 namespace editor {
 
@@ -382,6 +386,30 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
             }
         }
     }
+
+
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_SOUND_FILE_INDEX)) {
+            IM_ASSERT(payload->DataSize == sizeof(int));
+            int sound_index = *(const int*)payload->Data;
+
+            auto mouse_pos = ImGui::GetMousePos();
+            mouse_pos.x -= editor_screen_pos.x;
+            mouse_pos.y -= editor_screen_pos.y;
+            auto editor_panning = ImNodes::EditorContextGetPanning();
+            mouse_pos.x -= editor_panning.x;
+            mouse_pos.y -= editor_panning.y;
+
+            auto click_pos = to_grid_position(mouse_pos);
+
+            action = view_action_type_e::NODE_ADD;
+            mut_view_state.node_action.add_position = click_pos;
+            mut_view_state.node_action.action_data = data::FILE_FNODE_TYPE;
+            mut_view_state.make_node_file_assign_action = true;
+        }
+        ImGui::EndDragDropTarget();
+    }
+
 
     static data::vec2_t click_pos = {};
     int hovered_node_id = {};
@@ -877,7 +905,14 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
                 auto& filename = file_list[i];
                 if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
-                    mut_view_state.selected_sound_file_index = i; 
+                    mut_view_state.selected_sound_file_index = i;
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    // Set payload to carry the index of our item (could be anything)
+                    ImGui::SetDragDropPayload(DND_SOUND_FILE_INDEX, &i, sizeof(int));
+                    ImGui::Text("Add %s", filename.c_str());
+                    ImGui::EndDragDropSource();
+                    mut_view_state.selected_sound_file_index = i;
+                }
                 if (mut_view_state.selected_sound_file_index == i) {
                     ImGui::SetItemAllowOverlap();
                     ImGui::SameLine();
@@ -945,6 +980,13 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
             action = view_action_type_e::REDO;
         }
+    }
+
+    if (action == view_action_type_e::NONE && mut_view_state.make_node_file_assign_action) {
+        mut_view_state.make_node_file_assign_action = false;
+        // todo: fix hacky implementation
+        action = view_action_type_e::NODE_FILE_ASSIGN_SOUND;
+        mut_view_state.node_action.node_id = mut_view_state.selected_group_state.nodes.back();
     }
 
     return action;
