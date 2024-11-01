@@ -531,6 +531,11 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
     return action;
 }
 
+static void show_group(view_state_t& mut_view_state, size_t group_index) {
+    mut_view_state.active_group_index = group_index;
+    mut_view_state.focus_selected_group = true;
+}
+
 view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state) {
     view_action_type_e action = process_view_menu(mut_view_state);
 
@@ -741,11 +746,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                                 ev_action.target_index = active_group_index;
                                 action = view_action_type_e::EVENT_UPDATE;
                             }
-
-                            if (ImGui::MenuItem("Show group")) {
-                                mut_view_state.active_group_index = ev_action.target_index;
-                                mut_view_state.focus_selected_group = true;
-                            }
                         }
                         
                         ImGui::EndPopup();
@@ -757,7 +757,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     if (data::is_action_target_group(ev_action.type)) {
                         auto& group = data_state.groups[ev_action.target_index];
                         const char* target_label = group.name.c_str();
-                        ImGui::Text(target_label);
+                        if (active_group_index == ev_action.target_index) {
+                            ImGui::Text(target_label);
+                        } else if (ImGui::Button(target_label)) {
+                            show_group(mut_view_state, ev_action.target_index);
+                        }
                     } else if (data::is_action_type_target_bus(ev_action.type)) {
 
                         int current_index = ev_action.target_index;
