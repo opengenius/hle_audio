@@ -65,6 +65,25 @@ static void update_active_event(app_state_t* state, size_t active_index) {
 
     auto& event = state->bl_state.data_state.events[active_index];
     view_state.event_state = event;
+
+    if (view_state.option_select_group_for_event) {
+        auto new_group_index = view_state.active_group_index;
+        for (auto& action : event.actions) {
+            if (!data::is_action_target_group(action.type)) continue;
+
+            if (action.target_index == view_state.active_group_index) {
+                // keep active if it's in the action list
+                new_group_index = view_state.active_group_index;
+                break;
+            } else if (new_group_index == view_state.active_group_index) {
+                // update to first one
+                new_group_index = action.target_index;
+            }
+        }
+        if (new_group_index != view_state.active_group_index) {
+            update_active_group(state, new_group_index);
+        }
+    }
 }
 
 /*

@@ -205,6 +205,10 @@ static sound_id_t make_sound(hlea_context_t* ctx,
     auto& fd_ref = bank->static_data->file_data.get(buf_ptr, file_node->file_index);
     file_data_t::meta_t meta = fd_ref.meta;
 
+    if (meta.coding_format == audio_format_type_e::none) {
+        return invalid_id;
+    }
+
     data_buffer_t buffer_data = {};
     if (fd_ref.data_buffer.count) {
         buffer_data.data = (uint8_t*)fd_ref.data_buffer.elements.get_ptr(buf_ptr); // todo: void* cast, but read only here
