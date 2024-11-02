@@ -593,6 +593,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     mut_view_state.action_group_index = data_state.groups.size() - 1;
                     mut_view_state.focus_selected_group = true;
                 }
+                ImGui::SameLine();
+                if (ImGuiExt::InputText("Filter", "enter text here", 
+                        &mut_view_state.group_filter_str, ImGuiInputTextFlags_AutoSelectAll)) {
+                    action = view_action_type_e::GROUP_FILTER;
+                }
 
                 ImGui::Separator();
 
@@ -600,17 +605,16 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
 
                 bool add_pressed = false;
                 bool remove_pressed = false;
-                using groups_type_t = decltype(data_state.groups);
-                auto groups_size = data_state.groups.size();
-                ClippedListWithAddRemoveButtons(
-                    groups_size, 
+
+                using data_state_pointer_t = decltype(&data_state);
+                ClippedListWithAddRemoveButtonsFiltered(
+                    data_state.groups.size(), 
                     mut_view_state.scale, 
-                    do_focus_group, mut_view_state.active_group_index, 
-                    &data_state.groups, [](const void* ud, int index) {
-                        auto elems_ptr = (const groups_type_t*)ud;
-                        return elems_ptr->at(index).name.c_str();
+                    do_focus_group, mut_view_state.group_filtered_state, 
+                    &data_state, [](const void* ud, int index) {
+                        auto data_state_ptr = (data_state_pointer_t)ud;
+                        return data_state_ptr->groups[index].name.c_str();
                     },
-                    &mut_view_state.active_group_index,
                     &add_pressed, &remove_pressed);
 
                 if (add_pressed) {

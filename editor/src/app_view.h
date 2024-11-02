@@ -19,6 +19,7 @@ enum class view_action_type_e {
     GROUP_ADD,
     GROUP_REMOVE,
     APPLY_SELECTED_GROUP_UPDATE,
+    GROUP_FILTER,
 
     NODE_UPDATE,
     NODE_ADD,
@@ -101,11 +102,8 @@ struct view_state_t {
     };
 
     // group list
-    /* 
-        better be implemented with optimal call to filter_<events|groups> in update_mutable_view_state
     std::string group_filter_str;
     filtered_indices_list_state_t group_filtered_state;
-    */
 
     // groups
     size_t active_group_index = data::invalid_index;

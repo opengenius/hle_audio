@@ -86,30 +86,6 @@ static void update_active_event(app_state_t* state, size_t active_index) {
     }
 }
 
-/*
-static void filter_groups(app_state_t* state) {
-    auto& view_state = state->view_state;
-
-    auto& list_state = view_state.group_filtered_state;
-
-    list_state.indices.clear();
-    list_state.list_index = invalid_index;
-
-    const auto& groups = state->bl_state.data_state.groups;
-    for (size_t group_index = 0; group_index < groups.size(); ++group_index) {
-        auto& group = groups[group_index];
-
-        // skip if name doesn't match
-        if (group.name.find(view_state.group_filter_str) == std::string::npos) continue;
-
-        list_state.indices.push_back(group_index);
-
-        if (view_state.active_group_index == group_index) {
-            list_state.list_index = list_state.indices.size() - 1;
-        }
-    }
-}*/
-
 static bool find_substring_ic(std::string_view str, std::string_view substr)
 {
     return std::search(
@@ -119,6 +95,35 @@ static bool find_substring_ic(std::string_view str, std::string_view substr)
             return std::toupper(ch1) == std::toupper(ch2); 
         }
     ) != str.end();
+}
+
+static void filter_groups(app_state_t* state) {
+    auto& view_state = state->view_state;
+
+    auto& filtered_state = view_state.group_filtered_state;
+
+    filtered_state.indices.clear();
+
+    // exit early if no filter
+    if (view_state.group_filter_str.size() == 0) {
+        filtered_state.list_index = view_state.active_group_index;
+        return;
+    }
+    filtered_state.list_index = data::invalid_index;
+
+    const auto& groups = state->bl_state.data_state.groups;
+    for (size_t group_index = 0; group_index < groups.size(); ++group_index) {
+        auto& group = groups[group_index];
+
+        // skip if name doesn't match
+        if (!find_substring_ic(group.name, view_state.group_filter_str)) continue;
+
+        filtered_state.indices.push_back(group_index);
+
+        if (view_state.active_group_index == group_index) {
+            filtered_state.list_index = filtered_state.indices.size() - 1;
+        }
+    }
 }
 
 static void filter_events(app_state_t* state) {
@@ -360,7 +365,7 @@ bool process_frame(app_state_t* state) {
     view_state.has_wav_playing = rt::is_file_playing(state->editor_runtime);
     view_state.sound_files_u8_names_ptr = &state->sound_files_u8_names;
 
-    const auto prev_group_index = view_state.active_group_index;
+    const auto prev_group_index = view_state.group_filtered_state.list_index;
     const auto prev_event_index = view_state.events_filtered_state.list_index;
 
     auto action = build_view(view_state, state->bl_state.data_state);
@@ -368,8 +373,10 @@ bool process_frame(app_state_t* state) {
     //
     // modify view state
     //
-    if (prev_group_index != view_state.active_group_index)
-        update_active_group(state, view_state.active_group_index);
+    if (prev_group_index != view_state.group_filtered_state.list_index) {
+        auto selected_group_index = view_state.group_filtered_state.get_index(view_state.group_filtered_state.list_index);
+        update_active_group(state, selected_group_index);
+    }
 
     if (prev_event_index != view_state.events_filtered_state.list_index) {
         auto selected_event_index = view_state.events_filtered_state.get_index(view_state.events_filtered_state.list_index);
@@ -455,6 +462,11 @@ bool process_frame(app_state_t* state) {
             view_state.active_event_index, view_state.event_action_cmd_index);
         update_active_event(state, view_state.active_event_index);
         break;
+
+    case view_action_type_e::GROUP_FILTER:
+        filter_groups(state);
+        break;
+
     case view_action_type_e::EVENT_FILTER:
         filter_events(state);
         state->view_state.focus_selected_event = true;
