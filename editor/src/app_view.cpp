@@ -559,11 +559,6 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
     return action;
 }
 
-static void show_group(view_state_t& mut_view_state, size_t group_index) {
-    mut_view_state.active_group_index = group_index;
-    mut_view_state.focus_selected_group = true;
-}
-
 view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state) {
     view_action_type_e action = process_view_menu(mut_view_state);
 
@@ -792,7 +787,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                         if (active_group_index == ev_action.target_index) {
                             ImGui::Text(target_label);
                         } else if (ImGui::Button(target_label)) {
-                            show_group(mut_view_state, ev_action.target_index);
+                            mut_view_state.action_group_index = ev_action.target_index;
+                            action = view_action_type_e::GROUP_SHOW;
                         }
                     } else if (data::is_action_type_target_bus(ev_action.type)) {
 
@@ -803,7 +799,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                             return true;
                         };
                         auto data = (void*)&data_state.output_buses;
-                        if (ImGui::Combo("output bus", &current_index, 
+                        if (ImGui::Combo("bus", &current_index, 
                                 getter, data, (int)data_state.output_buses.size())) {
                             if (ev_action.target_index != current_index) {
                                 ev_action.target_index = current_index;

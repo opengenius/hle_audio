@@ -65,25 +65,6 @@ static void update_active_event(app_state_t* state, size_t active_index) {
 
     auto& event = state->bl_state.data_state.events[active_index];
     view_state.event_state = event;
-
-    if (view_state.option_select_group_for_event) {
-        auto new_group_index = view_state.active_group_index;
-        for (auto& action : event.actions) {
-            if (!data::is_action_target_group(action.type)) continue;
-
-            if (action.target_index == view_state.active_group_index) {
-                // keep active if it's in the action list
-                new_group_index = view_state.active_group_index;
-                break;
-            } else if (new_group_index == view_state.active_group_index) {
-                // update to first one
-                new_group_index = action.target_index;
-            }
-        }
-        if (new_group_index != view_state.active_group_index) {
-            update_active_group(state, new_group_index);
-        }
-    }
 }
 
 static bool find_substring_ic(std::string_view str, std::string_view substr)
@@ -336,6 +317,30 @@ static void fire_event(app_state_t* state) {
     hlea_fire_event(state->runtime_ctx, state->bank, event_name.c_str(), 0u);
 }
 
+static void update_group_for_selected_event(app_state_t* state) {
+    auto& view_state = state->view_state;
+
+    auto& event = state->bl_state.data_state.events[view_state.active_event_index];
+    auto new_group_index = view_state.active_group_index;
+    for (auto& action : event.actions) {
+        if (!data::is_action_target_group(action.type)) continue;
+
+        if (action.target_index == view_state.active_group_index) {
+            // keep active if it's in the action list
+            new_group_index = view_state.active_group_index;
+            break;
+        } else if (new_group_index == view_state.active_group_index) {
+            // update to first one
+            new_group_index = action.target_index;
+        }
+    }
+    if (new_group_index != view_state.active_group_index) {
+        update_active_group(state, new_group_index);
+        filter_groups(state);
+        state->view_state.focus_selected_group = true;
+    }
+}
+
 bool process_frame(app_state_t* state) {
     /**
      *  update runtime
@@ -384,6 +389,10 @@ bool process_frame(app_state_t* state) {
     if (prev_event_index != view_state.events_filtered_state.list_index) {
         auto selected_event_index = view_state.events_filtered_state.get_index(view_state.events_filtered_state.list_index);
         update_active_event(state, selected_event_index);
+
+        if (view_state.option_select_group_for_event) {
+            update_group_for_selected_event(state);
+        }
     }
 
 
@@ -431,6 +440,11 @@ bool process_frame(app_state_t* state) {
         remove_group(bl_state, view_state.action_group_index);
         // full update as event list could be updated
         update_mutable_view_state(state);
+        break;
+    case view_action_type_e::GROUP_SHOW:
+        update_active_group(state, view_state.action_group_index);
+        filter_groups(state);
+        state->view_state.focus_selected_group = true;
         break;
     case view_action_type_e::APPLY_SELECTED_GROUP_UPDATE: {
         apply_group_update(bl_state, view_state.active_group_index, 

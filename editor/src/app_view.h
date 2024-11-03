@@ -18,6 +18,7 @@ enum class view_action_type_e {
 
     GROUP_ADD,
     GROUP_REMOVE,
+    GROUP_SHOW,
     APPLY_SELECTED_GROUP_UPDATE,
     GROUP_FILTER,
 
