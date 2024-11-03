@@ -13,6 +13,7 @@ enum class view_action_type_e {
     SAVE,
     UNDO,
     REDO,
+    SWITCH_OPTION_SELECT_GROUP_FOR_EVENT,
     SAVE_AND_EXIT,
     EXIT,
 

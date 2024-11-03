@@ -52,7 +52,10 @@ static view_action_type_e process_view_menu(const view_state_t& view_state) {
             if (ImGui::MenuItem("Redo", "CTRL+Y", false, view_state.has_redo)) {
                 action = view_action_type_e::REDO;
             }
-            // ImGui::Separator();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Select group for event", nullptr, view_state.option_select_group_for_event)) {
+                action = view_action_type_e::SWITCH_OPTION_SELECT_GROUP_FOR_EVENT;
+            }
             // if (ImGui::MenuItem("Cut", "CTRL+X")) {}
             // if (ImGui::MenuItem("Copy", "CTRL+C")) {}
             // if (ImGui::MenuItem("Paste", "CTRL+V")) {}

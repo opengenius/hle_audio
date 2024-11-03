@@ -419,6 +419,10 @@ bool process_frame(app_state_t* state) {
         perform_redo(state);
         break;
 
+    case view_action_type_e::SWITCH_OPTION_SELECT_GROUP_FOR_EVENT:
+        view_state.option_select_group_for_event = !view_state.option_select_group_for_event;
+        break;
+
     case view_action_type_e::SAVE_AND_EXIT: // SAVE + EXIT duplication
         save_store_json(&bl_state->data_state, state->data_file_path.c_str());
         keep_running = false;
