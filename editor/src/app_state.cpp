@@ -469,11 +469,17 @@ bool process_frame(app_state_t* state) {
         update_event(bl_state, view_state.active_event_index, event_state);
         update_mutable_view_state(state);
         break;
-    case view_action_type_e::EVENT_ADD_ACTION:
+    case view_action_type_e::EVENT_ADD_ACTION: {
+        rt::action_t action = {};
+        if (view_state.active_group_index != data::invalid_index) {
+            action.type = rt::action_type_e::play_single;
+            action.target_index = view_state.active_group_index;
+        }
         add_event_action(bl_state, 
-            view_state.active_event_index, view_state.active_group_index);
+            view_state.active_event_index, action);
         update_active_event(state, view_state.active_event_index);
         break;
+    }
     case view_action_type_e::EVENT_REMOVE_ACTION:
         remove_event_action(bl_state, 
             view_state.active_event_index, view_state.event_action_cmd_index);
@@ -489,6 +495,22 @@ bool process_frame(app_state_t* state) {
         state->view_state.focus_selected_event = true;
         break;
 
+    case view_action_type_e::EVENT_ADD_WITH_PLAY_GROUP: {
+        auto new_index = bl_state->data_state.events.size();
+        create_event(bl_state, new_index);
+        auto new_event = bl_state->data_state.events[new_index];
+        new_event.name = view_state.selected_group_state.name;
+        rt::action_t action = {};
+        action.type = rt::action_type_e::play_single;
+        action.target_index = view_state.action_group_index;
+        new_event.actions.push_back(action);
+        update_event(bl_state, new_index, new_event);
+     
+        update_active_event(state, new_index);
+        update_mutable_view_state(state);
+        view_state.apply_edit_focus_on_event = true;
+        break;
+    }
     case view_action_type_e::NODE_ADD: {
         auto& node_action = view_state.node_action;
 

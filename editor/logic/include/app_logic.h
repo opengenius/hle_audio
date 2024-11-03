@@ -37,7 +37,7 @@ void remove_event(logic_state_t* state, size_t index);
 void update_event(logic_state_t* state, size_t event_index, 
         const data::event_t& event_state);
 
-void add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index);
+void add_event_action(logic_state_t* state, size_t event_index, const rt::action_t& action);
 void remove_event_action(logic_state_t* state, size_t event_index, size_t action_index);
 
 void rename_bus(logic_state_t* state, size_t bus_index, const char* new_name);

@@ -28,15 +28,10 @@ void apply_group_update(logic_state_t* state,
     execute_cmd_first(state, std::move(cmd));
 }
 
-void add_event_action(logic_state_t* state, size_t event_index, size_t target_group_index) {
+void add_event_action(logic_state_t* state, size_t event_index, const rt::action_t& action) {
     auto event = state->data_state.events[event_index];
-
-    rt::action_t act = {};
-    if (target_group_index != data::invalid_index) {
-        act.target_index = target_group_index;
-    }
     
-    event.actions.push_back(act);
+    event.actions.push_back(action);
 
     update_event(state, event_index, event);
 }

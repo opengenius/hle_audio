@@ -240,14 +240,18 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
-    ImGui::Text("Node graph:");
-    ImGui::SameLine();
     if (ImGui::SmallButton("<<< Filter events")) {
         mut_view_state.event_filter_group_index = mut_view_state.action_group_index;
         mut_view_state.groups_size_on_event_filter_group = data_state.groups.size();
         mut_view_state.select_events_tab = true;
         action = view_action_type_e::EVENT_FILTER;
     }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Create play event")) {
+        mut_view_state.select_events_tab = true;
+        action = view_action_type_e::EVENT_ADD_WITH_PLAY_GROUP;
+    }
+    ImGui::Text("Node graph:");
     auto editor_panning = ImNodes::EditorContextGetPanning();
     if (editor_panning.x != 0.0f || editor_panning.y != 0.0f) {
         ImGui::SameLine();

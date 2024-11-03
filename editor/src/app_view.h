@@ -34,6 +34,7 @@ enum class view_action_type_e {
     EVENT_ADD_ACTION,
     EVENT_REMOVE_ACTION,
     EVENT_FILTER,
+    EVENT_ADD_WITH_PLAY_GROUP,
 
     REFRESH_SOUND_LIST,
 
