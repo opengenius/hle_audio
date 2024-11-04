@@ -202,58 +202,11 @@ static data::vec2_t to_grid_position(ImVec2 pos) {
     };
 }
 
-static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
-                view_action_type_e& action) {
+static void build_node_graph(view_state_t& mut_view_state, const data_state_t& data_state, 
+        view_action_type_e& action) {
     auto& data_group = get_group(&data_state, mut_view_state.active_group_index);
-
     auto& group_state = mut_view_state.selected_group_state;
 
-    ImGuiExt::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
-    if (ImGui::IsItemDeactivatedAfterEdit() &&
-            data_group.name != group_state.name) {
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
-    }
-    ImGui::SliderFloat("volume", &group_state.volume, 0.0f, 1.0f);
-    if (ImGui::IsItemDeactivatedAfterEdit() &&
-            data_group.volume != group_state.volume) {
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
-    }
-
-    const char* time_sec_format = "%.3f";
-    const float f32_zero = 0.0f;
-    ImGui::DragScalar("cross fade time", ImGuiDataType_Float, 
-            &group_state.cross_fade_time, 
-            0.01f,  &f32_zero, nullptr,
-            time_sec_format);
-    if (ImGui::IsItemDeactivatedAfterEdit() &&
-            data_group.cross_fade_time != group_state.cross_fade_time) {
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
-    }
-
-    int current_index = group_state.output_bus_index;
-    auto getter = [](void* data, int n, const char** out_str) {
-        auto buses = (decltype(&data_state.output_buses))data;
-        *out_str = buses->at(n).name.c_str();
-        return true;
-    };
-    auto data = (void*)&data_state.output_buses;
-    if (ImGui::Combo("output bus", &current_index, 
-            getter, data, (int)data_state.output_buses.size())) {
-        group_state.output_bus_index = current_index;
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
-    }
-
-    if (ImGui::SmallButton("<<< Filter events")) {
-        mut_view_state.event_filter_group_index = mut_view_state.action_group_index;
-        mut_view_state.groups_size_on_event_filter_group = data_state.groups.size();
-        mut_view_state.select_events_tab = true;
-        action = view_action_type_e::EVENT_FILTER;
-    }
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Create play event")) {
-        mut_view_state.select_events_tab = true;
-        action = view_action_type_e::EVENT_ADD_WITH_PLAY_GROUP;
-    }
     ImGui::Text("Node graph:");
     auto editor_panning = ImNodes::EditorContextGetPanning();
     if (editor_panning.x != 0.0f || editor_panning.y != 0.0f) {
@@ -275,14 +228,16 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
         }
     }
     if (ImNodes::NumSelectedNodes() == 1) {
-        data::node_id_t selected_node_id = {};
-        ImNodes::GetSelectedNodes((int*)&selected_node_id);
-
-        if (selected_node_id != group_state.start_node) {
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Make start")) {
-                group_state.start_node = selected_node_id;
-                action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+        int imnode_id = {};
+        ImNodes::GetSelectedNodes(&imnode_id);
+        if (imnode_id != -1) {
+            auto selected_node_id = data::node_id_t(imnode_id);
+            if (selected_node_id != group_state.start_node) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Make start")) {
+                    group_state.start_node = selected_node_id;
+                    action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+                }
             }
         }
     }
@@ -458,6 +413,62 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
     }
 
     ImGui::EndChild();
+}
+
+static void build_selected_group_view(view_state_t& mut_view_state, const data_state_t& data_state,
+                view_action_type_e& action) {
+    auto& data_group = get_group(&data_state, mut_view_state.active_group_index);
+
+    auto& group_state = mut_view_state.selected_group_state;
+
+    ImGuiExt::InputText("name", nullptr, &group_state.name, ImGuiInputTextFlags_AutoSelectAll);
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.name != group_state.name) {
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+    ImGui::SliderFloat("volume", &group_state.volume, 0.0f, 1.0f);
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.volume != group_state.volume) {
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+
+    const char* time_sec_format = "%.3f";
+    const float f32_zero = 0.0f;
+    ImGui::DragScalar("cross fade time", ImGuiDataType_Float, 
+            &group_state.cross_fade_time, 
+            0.01f,  &f32_zero, nullptr,
+            time_sec_format);
+    if (ImGui::IsItemDeactivatedAfterEdit() &&
+            data_group.cross_fade_time != group_state.cross_fade_time) {
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+
+    int current_index = group_state.output_bus_index;
+    auto getter = [](void* data, int n, const char** out_str) {
+        auto buses = (decltype(&data_state.output_buses))data;
+        *out_str = buses->at(n).name.c_str();
+        return true;
+    };
+    auto data = (void*)&data_state.output_buses;
+    if (ImGui::Combo("output bus", &current_index, 
+            getter, data, (int)data_state.output_buses.size())) {
+        group_state.output_bus_index = current_index;
+        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+    }
+
+    if (ImGui::SmallButton("<<< Filter events")) {
+        mut_view_state.event_filter_group_index = mut_view_state.action_group_index;
+        mut_view_state.groups_size_on_event_filter_group = data_state.groups.size();
+        mut_view_state.select_events_tab = true;
+        action = view_action_type_e::EVENT_FILTER;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Create play event")) {
+        mut_view_state.select_events_tab = true;
+        action = view_action_type_e::EVENT_ADD_WITH_PLAY_GROUP;
+    }
+
+    build_node_graph(mut_view_state, data_state, action);
 }
 
 view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_state_t& data_state) {
