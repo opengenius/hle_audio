@@ -548,8 +548,7 @@ static void build_file_list(view_state_t& mut_view_state,
         action = view_action_type_e::REFRESH_SOUND_LIST;
     }
 
-    const float wav_list_width = 200 * mut_view_state.scale;
-    ImGui::BeginChild("Files", ImVec2(wav_list_width, 0), true);
+    ImGui::BeginChild("Files");
     ImGuiListClipper clipper;
     clipper.Begin((int)file_list.size());
     while (clipper.Step())
@@ -604,18 +603,18 @@ static float animate_pane(float* anim_value_ptr, float target_value) {
 
 view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state) {
     auto& style = ImGui::GetStyle();
+    auto padding_x = style.WindowPadding.x;
 
     view_action_type_e action = process_view_menu(mut_view_state, data_state);
 
     float root_pane_width_max = ImGui::GetContentRegionAvail().x - mut_view_state.root_pane_width_scaled;
     ImGuiExt::Splitter(true, 4.0f, 
             &mut_view_state.root_pane_width_scaled, &root_pane_width_max, 
-            50 * mut_view_state.scale, 8);
+            100 * mut_view_state.scale, 8);
 
     const auto active_group_index = mut_view_state.active_group_index;
     mut_view_state.action_group_index = active_group_index;
     {
-        auto padding_x = style.WindowPadding.x;
         auto left_pane_width = mut_view_state.root_pane_width_scaled - padding_x / 2 + 2;
         
         float runtime_height = animate_pane(&mut_view_state.runtime_pane_height_anim, mut_view_state.runtime_pane_height);
@@ -753,8 +752,6 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         ImGui::EndChild(); // left_pane
     }
 
-    const float wav_list_width = 200 * mut_view_state.scale;
-
     ImGui::SameLine();
     ImGui::BeginChild("Properties pane");
 
@@ -764,11 +761,17 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     mut_view_state.apply_edit_focus_on_group = false;
     if (active_group_index != data::invalid_index) {
         if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            float pane_width_max = ImGui::GetContentRegionAvail().x - mut_view_state.files_pane_width_scaled;
+            ImGuiExt::Splitter(true, 4.0f, 
+                    &pane_width_max, &mut_view_state.files_pane_width_scaled,
+                    8, 100 * mut_view_state.scale);
+
             if (apply_edit_focus_on_group) {
                 ImGui::SetKeyboardFocusHere();
             }
 
-            ImGui::BeginChild("group properties pane", ImVec2(-wav_list_width - style.WindowPadding.x, 0));
+            ImGui::BeginChild("group properties pane", ImVec2(-mut_view_state.files_pane_width_scaled - padding_x / 2 + 2, 0));
             build_selected_group_view(mut_view_state, data_state, action);
             ImGui::EndChild();
             ImGui::SameLine();        

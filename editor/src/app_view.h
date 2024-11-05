@@ -78,6 +78,7 @@ struct view_state_t {
     float scale;
 
     float root_pane_width_scaled;
+    float files_pane_width_scaled;
     float runtime_pane_height = 0.0f;
     float runtime_pane_height_anim = 0.0f;
     float bottom_pane_height = 0.0f;

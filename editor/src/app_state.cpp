@@ -252,6 +252,7 @@ app_state_t* create_app_state(float scale) {
     res->view_state = empty_vs;
     res->view_state.scale = scale;
     res->view_state.root_pane_width_scaled = 200 * scale;
+    res->view_state.files_pane_width_scaled = 200 * scale;
 
     return res;
 }
