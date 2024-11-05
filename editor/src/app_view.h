@@ -38,6 +38,7 @@ enum class view_action_type_e {
     EVENT_ADD_WITH_PLAY_GROUP,
 
     REFRESH_SOUND_LIST,
+    FILES_FILTER,
 
     BUS_ADD,
     BUS_RENAME,
@@ -130,6 +131,8 @@ struct view_state_t {
     size_t event_action_cmd_index;
 
     // sound file list
+    std::string files_filter_str;
+    filtered_indices_list_state_t files_filtered_state;
     const std::vector<std::u8string>* sound_files_u8_names_ptr;
     size_t selected_sound_file_index = data::invalid_index;
 

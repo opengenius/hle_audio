@@ -141,6 +141,37 @@ static void filter_events(app_state_t* state) {
     }
 }
 
+static void filter_files(app_state_t* state) {
+    auto& view_state = state->view_state;
+
+    auto& filtered_state = view_state.files_filtered_state;
+    filtered_state.indices.clear();
+
+    // exit early if no filter
+    if (view_state.files_filter_str.size() == 0) {
+        filtered_state.list_index = view_state.selected_sound_file_index;
+        return;
+    }
+
+    filtered_state.list_index = data::invalid_index;
+
+    const auto& files = *view_state.sound_files_u8_names_ptr;
+    for (size_t it_index = 0; it_index < files.size(); ++it_index) {
+        auto& filename = files[it_index];
+
+        std::string filename_str(filename.cbegin(), filename.cend());
+
+        // skip if name doesn't match
+        if (!find_substring_ic(filename_str, view_state.files_filter_str)) continue;
+
+        filtered_state.indices.push_back(it_index);
+
+        if (view_state.selected_sound_file_index == it_index) {
+            filtered_state.list_index = filtered_state.indices.size() - 1;
+        }
+    }
+}
+
 static void update_mutable_view_state(app_state_t* state) {
     auto& view_state = state->view_state;
     auto& data_state = state->bl_state.data_state;
@@ -573,6 +604,9 @@ bool process_frame(app_state_t* state) {
     }
     case view_action_type_e::REFRESH_SOUND_LIST:
         refresh_wav_list(state);
+        break;
+    case view_action_type_e::FILES_FILTER:
+        filter_files(state);
         break;
 
     case view_action_type_e::BUS_ADD:

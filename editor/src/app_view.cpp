@@ -540,7 +540,7 @@ static void build_file_list(view_state_t& mut_view_state,
         view_action_type_e& action) {
     auto& file_list = *mut_view_state.sound_files_u8_names_ptr;
 
-    ImGui::BeginGroup();
+    ImGui::BeginChild("files_pane");
     
     ImGui::Text("Sound files (%d):", (int)file_list.size());
     ImGui::SameLine();
@@ -548,25 +548,38 @@ static void build_file_list(view_state_t& mut_view_state,
         action = view_action_type_e::REFRESH_SOUND_LIST;
     }
 
+    if (ImGuiExt::InputText("Filter", "enter text here", 
+            &mut_view_state.files_filter_str, ImGuiInputTextFlags_AutoSelectAll)) {
+        action = view_action_type_e::FILES_FILTER;
+    }
+
+    ImGui::Separator();
+
+    auto& filtered_state = mut_view_state.files_filtered_state;
+    auto list_size = (0 < filtered_state.indices.size()) ? 
+            filtered_state.indices.size() :
+            file_list.size();
+
     ImGui::BeginChild("Files");
     ImGuiListClipper clipper;
-    clipper.Begin((int)file_list.size());
+    clipper.Begin((int)list_size);
     while (clipper.Step())
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-            auto& filename = file_list[i];
+            auto file_index = filtered_state.get_index(i);
+            auto& filename = file_list[file_index];
 
             const float cursor_start_posx = ImGui::GetCursorPosX();
 
-            if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
-                mut_view_state.selected_sound_file_index = i;
+            if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == file_index))
+                mut_view_state.selected_sound_file_index = file_index;
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 // Set payload to carry the index of our item (could be anything)
-                ImGui::SetDragDropPayload(DND_SOUND_FILE_INDEX, &i, sizeof(int));
+                ImGui::SetDragDropPayload(DND_SOUND_FILE_INDEX, &file_index, sizeof(int));
                 ImGui::Text("Add %s", filename.c_str());
                 ImGui::EndDragDropSource();
-                mut_view_state.selected_sound_file_index = i;
+                mut_view_state.selected_sound_file_index = file_index;
             }
-            if (mut_view_state.selected_sound_file_index == i) {
+            if (mut_view_state.selected_sound_file_index == file_index) {
                 ImGui::SetItemAllowOverlap();
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(cursor_start_posx);
@@ -590,7 +603,7 @@ static void build_file_list(view_state_t& mut_view_state,
         }
     ImGui::EndChild();
 
-    ImGui::EndGroup();
+    ImGui::EndChild(); // files_pane
 }
 
 static float animate_pane(float* anim_value_ptr, float target_value) {
