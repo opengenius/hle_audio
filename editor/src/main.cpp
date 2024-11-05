@@ -16,6 +16,19 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+static float interpolate(float a, float b, float w) {
+    return a * w + b * (1.0f - w);
+}
+
+static ImVec4 premultiply(ImVec4 in) {
+    ImVec4 res = in;
+    res.x = interpolate(res.x, 1.0f, res.w);
+    res.y = interpolate(res.y, 1.0f, res.w);
+    res.z = interpolate(res.z, 1.0f, res.w);
+    res.w = 1.0f;
+    return res;
+} 
+
 int main(int argc, char** argv)
 {
     if (argc < 3) {
@@ -100,6 +113,7 @@ int main(int argc, char** argv)
     // io.Fonts->AddFontFromFileTTF("res/fonts/DroidSans.ttf", floorf(13.0f * SCALE));
     io.Fonts->AddFontFromMemoryCompressedBase85TTF(DroidSans_compressed_data_base85, floorf(13.0f * FONT_SCALE));
     ImGui::GetStyle().ScaleAllSizes(SCALE);
+    ImGui::GetStyle().Colors[ImGuiCol_Button] = premultiply(ImGui::GetStyle().Colors[ImGuiCol_Button]);
     ImNodes::GetStyle().GridSpacing *= SCALE;
     ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
     ImNodes::GetStyle().NodePadding.x = 3.0f * SCALE;

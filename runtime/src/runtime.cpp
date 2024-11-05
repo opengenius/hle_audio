@@ -24,6 +24,8 @@
  * streaming TODOs:
  *  - implement decoder_ti for ogg, etc
  *  - loop range support with decoder_ti is tricky (async decoding to start position doesn't help to maintain gapless playback)
+ *  - make MAX_POOL_CHUNKS configurable (chunk_streaming_cache.cpp)
+ *  - add configurable dynamic chunks pool to overflow default pool budget
  */
 
 using hle_audio::rt::data_buffer_t;

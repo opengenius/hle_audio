@@ -3,6 +3,7 @@
 #include "imnodes.h"
 #include "attribute_id_utils.inl"
 #include <algorithm>
+#include "imgui_utils.inl"
 
 using hle_audio::data::pin_counts_t;
 
@@ -22,19 +23,6 @@ static void TextAligned(const char* label, float avail, float alignment = 0.5f) 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
 
     ImGui::Text(label);
-}
-
-static bool SmallButtonAligned(const char* label, float avail, float alignment = 0.5f) {
-    ImGuiStyle& style = ImGui::GetStyle();
-
-    float size = ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f;
-    //  = ImGui::GetContentRegionAvail().x;
-
-    float off = (avail - size) * alignment;
-    if (off > 0.0f)
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
-
-    return ImGui::SmallButton(label);
 }
 
 static void begin_node_title(const build_node_view_desc_t& desc) {
@@ -155,7 +143,7 @@ view_action_type_e build_node_view(const data::random_flow_node_t& node, const b
             ImNodes::EndOutputAttribute();
         }
 
-        if (SmallButtonAligned("Add pin +", rest_width, 1.0f)) {
+        if (imgui_utils::SmallButtonAligned("Add pin +", rest_width, 1.0f)) {
             auto node_copy = node;
             ++node_copy.out_pin_count;
 

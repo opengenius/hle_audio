@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20.0)
 
-project(HLE_AUDIO)
+project(HLE_AUDIO
+  VERSION 0.6.1
+)
 
 Include(FetchContent)
 

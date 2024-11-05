@@ -5,6 +5,7 @@
 #include "imgui_ext.h"
 #include "nodes_view.h"
 #include "attribute_id_utils.inl"
+#include "imgui_utils.inl"
 
 
 using hle_audio::data::data_state_t;
@@ -14,34 +15,83 @@ using hle_audio::data::link_t;
 
 
 const char* DND_SOUND_FILE_INDEX = "DND_SOUND_FILE_INDEX";
-
+const float PANE_ANIMATION_SPEED = 10.0f;
 
 namespace hle_audio {
 namespace editor {
 
-static bool TreeNodeWithRemoveButton(uint32_t node_index, const char* label, bool* remove_pressed) {
-    bool expanded = ImGui::TreeNodeEx((void*)(intptr_t)node_index, ImGuiTreeNodeFlags_AllowItemOverlap | ImGuiTreeNodeFlags_DefaultOpen, label);
-    ImGui::SameLine();
-    ImGui::PushID(expanded ? -1 - node_index : node_index); // fix id conflict with expanded node and its unexpanded children
-    if (ImGui::SmallButton("-")) {
-        *remove_pressed = true;
-    }
-    ImGui::PopID();
-
-    return expanded;
+static float interpolate(float a, float b, float w) {
+    return a * w + b * (1.0f - w);
 }
 
-static view_action_type_e process_view_menu(const view_state_t& view_state) {
+static view_action_type_e build_settings_window(view_state_t& mut_view_state, const data_state_t& data_state, bool* p_open) {
+    view_action_type_e action = view_action_type_e::NONE;
+
+    // Main body of the Demo window starts here.
+    if (!ImGui::Begin("Settings", p_open))
+    {
+        // Early out if the window is collapsed, as an optimization.
+        ImGui::End();
+        return action;
+    }
+
+    if (ImGui::CollapsingHeader("Output buses", ImGuiTreeNodeFlags_DefaultOpen)) {
+        size_t index = 0;
+        for (auto& bus : data_state.output_buses) {
+            ImGui::PushID((void*)(uintptr_t)index);
+
+            if (ImGui::Button("..")) {
+                mut_view_state.action_bus_index = index;
+                mut_view_state.bus_edit_state.name = bus.name;
+                ImGui::OpenPopup("show_bus_popup");
+            }
+
+            if (ImGui::BeginPopup("show_bus_popup")) {
+                ImGuiExt::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
+                if (ImGui::IsItemDeactivatedAfterEdit() &&
+                        mut_view_state.bus_edit_state.name != bus.name) {
+                    action = view_action_type_e::BUS_RENAME;
+                    ImGui::CloseCurrentPopup();
+                }
+                
+                ImGui::EndPopup();
+            }
+
+            ImGui::SameLine();
+            ImGui::Text(bus.name.c_str());
+
+            ImGui::PopID();
+            ++index;
+        }
+
+
+        if (ImGui::SmallButton("Add bus")) {
+            action = view_action_type_e::BUS_ADD;
+        }
+    }
+
+    ImGui::End();
+
+    return action;
+}
+
+static view_action_type_e process_view_menu(view_state_t& mut_view_state, const data_state_t& data_state) {
     static bool show_app_metrics = false;
     static bool show_demo_window = false;
+    static bool show_settings_window = false;
+
+    const view_state_t& view_state = mut_view_state;
 
     view_action_type_e action = view_action_type_e::NONE;
     if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
+        if (ImGui::BeginMenu("Project")) {
             // if (ImGui::MenuItem("New", "CTRL+N")) {}
             // if (ImGui::MenuItem("Open...", "CTRL+O")) {}
             if (ImGui::MenuItem("Save", "CTRL+S", false, view_state.has_save)) {
                 action = view_action_type_e::SAVE;
+            }
+            if (ImGui::MenuItem("Settings")) {
+                show_settings_window = true;
             }
             ImGui::EndMenu();
         }
@@ -78,82 +128,14 @@ static view_action_type_e process_view_menu(const view_state_t& view_state) {
         ImGui::ShowMetricsWindow(&show_app_metrics);
     }
 
-    return action;
-}
-
-typedef const char* (*get_text_at_index_cb)(const void* ud, int index);
-
-static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool force_display_selected,
-                size_t selected_index, const void* ud, get_text_at_index_cb get_text_at_index,
-                size_t* new_selected_index, bool* add_pressed, bool* remove_pressed, bool* double_clicked = nullptr) {
-    assert(new_selected_index);
-    assert(add_pressed);
-    assert(remove_pressed);
-
-    ImGuiListClipper clipper;
-    clipper.Begin((int)elem_count);
-
-    while (clipper.Step()) {
-        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-            ImGui::PushID(i);
-            auto name = get_text_at_index(ud, i);
-            if (ImGui::Selectable(name, selected_index == i, ImGuiSelectableFlags_AllowDoubleClick)) {
-                *new_selected_index = i;
-                if (ImGui::IsMouseDoubleClicked(0) && double_clicked) {
-                    * double_clicked = true;
-                }
-            }
-
-            if (selected_index == i) {
-                ImGui::SetItemAllowOverlap();
-
-                auto content_width_with_scroll = ImGui::GetContentRegionMax().x - 2 * ImGui::GetWindowContentRegionMin().x;
-                ImGui::SameLine(content_width_with_scroll - 30 * scale);
-                if (ImGui::SmallButton("-")) {
-                    *remove_pressed = true;
-                }
-                ImGui::SameLine(content_width_with_scroll - 15 * scale);
-                if (ImGui::SmallButton("+")) {
-                    *add_pressed = true;
-                }
-            }
-            ImGui::PopID();
+    if (show_settings_window) {
+        auto settings_action = build_settings_window(mut_view_state, data_state, &show_settings_window);
+        if (settings_action != view_action_type_e::NONE) {
+            action = settings_action;
         }
     }
 
-    if (force_display_selected) {
-        float item_pos_y = clipper.StartPosY + clipper.ItemsHeight * selected_index;
-        ImGui::SetScrollFromPosY(item_pos_y - ImGui::GetWindowPos().y);
-    }
-}
-
-static void ClippedListWithAddRemoveButtonsFiltered(size_t elem_count, float scale, bool force_display_selected,
-                view_state_t::filtered_indices_list_state_t& filtered_state,
-                const void* ud, get_text_at_index_cb get_text_at_index,
-                bool* add_pressed, bool* remove_pressed, bool* double_clicked = nullptr) {
-
-    struct clipper_ctx_t {
-        view_state_t::filtered_indices_list_state_t& filtered_state;
-        const void* ud;
-        get_text_at_index_cb get_text_at_index;
-    };
-    clipper_ctx_t ctx = {filtered_state, ud, get_text_at_index};
-
-    auto list_size = (0 < filtered_state.indices.size()) ? 
-            filtered_state.indices.size() :
-            elem_count;
-    ClippedListWithAddRemoveButtons(
-        list_size, 
-        scale, 
-        force_display_selected, filtered_state.list_index, 
-        &ctx, [](const void* ud, int index) {
-            auto ctx_ptr = (clipper_ctx_t*)ud;
-
-            auto event_index = ctx_ptr->filtered_state.get_index(index);
-            return ctx_ptr->get_text_at_index(ctx_ptr->ud, event_index);
-        },
-        &filtered_state.list_index, 
-        add_pressed, remove_pressed, double_clicked);
+    return action;
 }
 
 static uint16_t get_node_in_pin_count(const data_state_t& data_state, size_t node_index) {
@@ -478,25 +460,6 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
     for (auto& bus : data_state.output_buses) {
         ImGui::PushID((void*)(uintptr_t)index);
 
-        if (ImGui::Button("..")) {
-            mut_view_state.action_bus_index = index;
-            mut_view_state.bus_edit_state.name = bus.name;
-            ImGui::OpenPopup("show_bus_popup");
-        }
-
-        if (ImGui::BeginPopup("show_bus_popup")) {
-            ImGuiExt::InputText("name", nullptr, &mut_view_state.bus_edit_state.name, ImGuiInputTextFlags_AutoSelectAll);
-            if (ImGui::IsItemDeactivatedAfterEdit() &&
-                    mut_view_state.bus_edit_state.name != bus.name) {
-                action = view_action_type_e::BUS_RENAME;
-                ImGui::CloseCurrentPopup();
-            }
-            
-            ImGui::EndPopup();
-        }
-
-        ImGui::SameLine();
-
         int* v_ptr = &mut_view_state.output_bus_volumes[index];
         if (ImGui::SliderInt(bus.name.c_str(), 
                 v_ptr, 0, 100)) {
@@ -570,15 +533,79 @@ view_action_type_e build_runtime_view(view_state_t& mut_view_state, const data_s
         }
     }
 
-    if (ImGui::SmallButton("Add bus")) {
-        action = view_action_type_e::BUS_ADD;
-    }
-
     return action;
 }
 
+static void build_file_list(view_state_t& mut_view_state, 
+        view_action_type_e& action) {
+    auto& file_list = *mut_view_state.sound_files_u8_names_ptr;
+
+    ImGui::BeginGroup();
+    
+    ImGui::Text("Sound files (%d):", (int)file_list.size());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Refresh")) {
+        action = view_action_type_e::REFRESH_SOUND_LIST;
+    }
+
+    const float wav_list_width = 200 * mut_view_state.scale;
+    ImGui::BeginChild("Files", ImVec2(wav_list_width, 0), true);
+    ImGuiListClipper clipper;
+    clipper.Begin((int)file_list.size());
+    while (clipper.Step())
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
+            auto& filename = file_list[i];
+
+            const float cursor_start_posx = ImGui::GetCursorPosX();
+
+            if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
+                mut_view_state.selected_sound_file_index = i;
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                // Set payload to carry the index of our item (could be anything)
+                ImGui::SetDragDropPayload(DND_SOUND_FILE_INDEX, &i, sizeof(int));
+                ImGui::Text("Add %s", filename.c_str());
+                ImGui::EndDragDropSource();
+                mut_view_state.selected_sound_file_index = i;
+            }
+            if (mut_view_state.selected_sound_file_index == i) {
+                ImGui::SetItemAllowOverlap();
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(cursor_start_posx);
+
+                float available_width = ImGui::GetContentRegionAvail().x;
+                const float cursor_start_posx = ImGui::GetCursorPosX();
+                if (mut_view_state.has_wav_playing) {
+                    float button_size = 0.0f;
+                    if (imgui_utils::SmallButtonAligned("Stop", available_width, 1.0f, &button_size)) {
+                        action = view_action_type_e::SOUND_STOP;
+                    }
+                    available_width -= button_size;
+                    ImGui::SameLine();
+                    ImGui::SetCursorPosX(cursor_start_posx);
+                }
+                if (imgui_utils::SmallButtonAligned("Play", available_width, 1.0f)) {
+                    action = view_action_type_e::SOUND_PLAY;
+                }
+                
+            }
+        }
+    ImGui::EndChild();
+
+    ImGui::EndGroup();
+}
+
+static float animate_pane(float* anim_value_ptr, float target_value) {
+    if (abs(*anim_value_ptr - target_value) < 1.0f) {
+        return target_value;
+    }
+    *anim_value_ptr = interpolate(target_value, *anim_value_ptr, ImGui::GetIO().DeltaTime * PANE_ANIMATION_SPEED);
+    return *anim_value_ptr;
+}
+
 view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& data_state) {
-    view_action_type_e action = process_view_menu(mut_view_state);
+    auto& style = ImGui::GetStyle();
+
+    view_action_type_e action = process_view_menu(mut_view_state, data_state);
 
     float root_pane_width_max = ImGui::GetContentRegionAvail().x - mut_view_state.root_pane_width_scaled;
     ImGuiExt::Splitter(true, 4.0f, 
@@ -588,9 +615,13 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     const auto active_group_index = mut_view_state.active_group_index;
     mut_view_state.action_group_index = active_group_index;
     {
-        auto padding_x = ImGui::GetStyle().WindowPadding.x;
+        auto padding_x = style.WindowPadding.x;
+        auto left_pane_width = mut_view_state.root_pane_width_scaled - padding_x / 2 + 2;
+        
+        float runtime_height = animate_pane(&mut_view_state.runtime_pane_height_anim, mut_view_state.runtime_pane_height);
 
-        ImGui::BeginChild("root_pane", ImVec2(mut_view_state.root_pane_width_scaled - padding_x / 2 + 2, 0));
+        ImGui::BeginChild("left_pane", ImVec2(left_pane_width, 0.0f));
+        ImGui::BeginChild("list_tabs_pane", ImVec2(0.0f, -runtime_height - style.WindowPadding.y));
         if (ImGui::BeginTabBar("root_objects", ImGuiTabBarFlags_None)) {
 
             //
@@ -620,7 +651,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 bool remove_pressed = false;
 
                 using data_state_pointer_t = decltype(&data_state);
-                ClippedListWithAddRemoveButtonsFiltered(
+                imgui_utils::ClippedListWithAddRemoveButtonsFiltered(
                     data_state.groups.size(), 
                     mut_view_state.scale, 
                     do_focus_group, mut_view_state.group_filtered_state, 
@@ -681,7 +712,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                 }
             
                 using data_state_pointer_t = decltype(&data_state);
-                ClippedListWithAddRemoveButtonsFiltered(
+                imgui_utils::ClippedListWithAddRemoveButtonsFiltered(
                     data_state.events.size(), 
                     mut_view_state.scale, 
                     force_display_selected, mut_view_state.events_filtered_state, 
@@ -706,15 +737,50 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             }
             ImGui::EndTabBar();
         }
-        ImGui::EndChild();
+        ImGui::EndChild(); // list_tabs_pane
+
+        // bus edit data
+        ImGui::BeginChild("runtime_pane", ImVec2(left_pane_width, runtime_height));
+        if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto rt_action = build_runtime_view(mut_view_state, data_state);
+            if (rt_action != view_action_type_e::NONE) {
+                action = rt_action;
+            }
+        }
+        mut_view_state.runtime_pane_height = ImGui::GetCursorPosY() - ImGui::GetCursorStartPos().y;
+        ImGui::EndChild(); // runtime_pane
+
+        ImGui::EndChild(); // left_pane
     }
 
-    auto& style = ImGui::GetStyle();
     const float wav_list_width = 200 * mut_view_state.scale;
 
     ImGui::SameLine();
-    ImGui::BeginChild("Properties pane", ImVec2(-wav_list_width - style.WindowPadding.x, 0), true);
+    ImGui::BeginChild("Properties pane");
 
+    float bottom_height = animate_pane(&mut_view_state.bottom_pane_height_anim, mut_view_state.bottom_pane_height);
+    ImGui::BeginChild("groups_pane", ImVec2(0.0f, -bottom_height - style.WindowPadding.y));
+    auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
+    mut_view_state.apply_edit_focus_on_group = false;
+    if (active_group_index != data::invalid_index) {
+        if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (apply_edit_focus_on_group) {
+                ImGui::SetKeyboardFocusHere();
+            }
+
+            ImGui::BeginChild("group properties pane", ImVec2(-wav_list_width - style.WindowPadding.x, 0));
+            build_selected_group_view(mut_view_state, data_state, action);
+            ImGui::EndChild();
+            ImGui::SameLine();        
+            //
+            // Sound file list
+            //
+            build_file_list(mut_view_state, action);
+        }
+    }
+    ImGui::EndChild(); // groups_pane
+
+    ImGui::BeginChild("bottom_panel", ImVec2(), false, ImGuiWindowFlags_NoScrollbar);
     auto apply_edit_focus_on_event = mut_view_state.apply_edit_focus_on_event;
     mut_view_state.apply_edit_focus_on_event = false;
             
@@ -864,93 +930,11 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             }
         }
     }
+    
+    mut_view_state.bottom_pane_height = ImGui::GetCursorPosY() - ImGui::GetCursorStartPos().y;
+    ImGui::EndChild(); // bottom_panel
 
-    auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
-    mut_view_state.apply_edit_focus_on_group = false;
-    if (active_group_index != data::invalid_index) {
-        if (ImGui::CollapsingHeader("Group Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
-            if (apply_edit_focus_on_group) {
-                ImGui::SetKeyboardFocusHere();
-            }
-
-            build_selected_group_view(mut_view_state, data_state, action);
-        }
-    }
-
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-
-    // bus edit data
-    ImGui::BeginChild("right_pane", ImVec2(wav_list_width, 0));
-    if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
-        auto rt_action = build_runtime_view(mut_view_state, data_state);
-        if (rt_action != view_action_type_e::NONE) {
-            action = rt_action;
-        }
-        ImGui::Separator();
-    }
-
-    //
-    // Sound file list
-    //
-    {
-        auto& file_list = *mut_view_state.sound_files_u8_names_ptr;
-
-        ImGui::BeginGroup();
-        
-        ImGui::Text("Sound files (%d):", (int)file_list.size());
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Refresh")) {
-            action = view_action_type_e::REFRESH_SOUND_LIST;
-        }
-        ImGui::BeginDisabled(mut_view_state.selected_sound_file_index == data::invalid_index);
-        if (ImGui::SmallButton("Play")) {
-            action = view_action_type_e::SOUND_PLAY;
-        }
-        if (mut_view_state.has_wav_playing) {
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Stop")) {
-                action = view_action_type_e::SOUND_STOP;
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::BeginChild("Files", ImVec2(wav_list_width, 0), true);
-        ImGuiListClipper clipper;
-        clipper.Begin((int)file_list.size());
-        while (clipper.Step())
-            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                auto& filename = file_list[i];
-                if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == i))
-                    mut_view_state.selected_sound_file_index = i;
-                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                    // Set payload to carry the index of our item (could be anything)
-                    ImGui::SetDragDropPayload(DND_SOUND_FILE_INDEX, &i, sizeof(int));
-                    ImGui::Text("Add %s", filename.c_str());
-                    ImGui::EndDragDropSource();
-                    mut_view_state.selected_sound_file_index = i;
-                }
-                if (mut_view_state.selected_sound_file_index == i) {
-                    ImGui::SetItemAllowOverlap();
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Play")) {
-                        action = view_action_type_e::SOUND_PLAY;
-                    }
-                    if (mut_view_state.has_wav_playing) {
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("Stop")) {
-                            action = view_action_type_e::SOUND_STOP;
-                        }
-                    }
-                }
-            }
-        ImGui::EndChild();
-
-        ImGui::EndGroup();
-    }   
-
-    ImGui::EndChild(); // right pane
+    ImGui::EndChild(); // Properties pane
 
     //
     // Exit save dialog

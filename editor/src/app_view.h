@@ -78,6 +78,10 @@ struct view_state_t {
     float scale;
 
     float root_pane_width_scaled;
+    float runtime_pane_height = 0.0f;
+    float runtime_pane_height_anim = 0.0f;
+    float bottom_pane_height = 0.0f;
+    float bottom_pane_height_anim = 0.0f;
     bool select_events_tab = false;
     bool focus_selected_event = false;
     bool focus_selected_group = false;
