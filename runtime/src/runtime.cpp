@@ -253,7 +253,7 @@ void hlea_fire_event(hlea_context_t* ctx, hlea_event_bank_t* bank, const char* e
                 auto event_name = event.name.get_ptr(buf_ptr);
                 return strcmp(event_name, str) < 0;
             });
-    if (event == event_offset_end) return;
+    if (event == event_offset_end || strcmp(eventName, event->name.get_ptr(buf_ptr)) != 0) return;
 
     auto actions_size = event->actions.count;
     auto actions = event->actions.elements.get_ptr(buf_ptr);
