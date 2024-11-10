@@ -3,7 +3,7 @@ FetchContent_Declare(minimp3
     GIT_TAG        afb604c06bc8beb145fecd42c0ceb5bda8795144
     GIT_SHALLOW    ON
 )
-FetchContent_Populate(minimp3)
+FetchContent_MakeAvailable(minimp3)
 
 add_library(hlea_runtime STATIC
     src/default_allocator.cpp

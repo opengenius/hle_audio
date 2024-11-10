@@ -3,8 +3,9 @@ FetchContent_Declare(rapidjson
     GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
     GIT_TAG        f54b0e47a08782a6131cc3d60f94d038fa6e0a51 # v1.1.0
     GIT_SHALLOW    ON
+    SOURCE_SUBDIR  fake_dir_name
 )
-FetchContent_Populate(rapidjson)
+FetchContent_MakeAvailable(rapidjson)
 
 # cmake_minimum_required(VERSION 3.24.0)
 # FetchContent_Declare(Ogg
