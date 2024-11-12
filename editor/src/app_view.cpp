@@ -752,7 +752,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         ImGui::EndChild(); // list_tabs_pane
 
         // bus edit data
-        ImGui::BeginChild("runtime_pane", ImVec2(left_pane_width, runtime_height));
+        ImGui::BeginChild("runtime_pane", ImVec2(left_pane_width, runtime_height), false, ImGuiWindowFlags_NoScrollbar);
         if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto rt_action = build_runtime_view(mut_view_state, data_state);
             if (rt_action != view_action_type_e::NONE) {
