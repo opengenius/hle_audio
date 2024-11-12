@@ -254,7 +254,7 @@ static sound_id_t make_sound(hlea_context_t* ctx,
                         &sound->engine_sound);
 
                     if (result == MA_SUCCESS) {
-                        ma_sound_set_looping(&sound->engine_sound, file_node->loop);
+                        // ma_sound_set_looping(&sound->engine_sound, file_node->loop);
 
                         return sound_id;
                     }

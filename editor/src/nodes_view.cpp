@@ -69,7 +69,8 @@ view_action_type_e build_node_view(const data::file_flow_node_t& file_node, cons
         }
         // ImGui::EndDisabled();
 
-        bool loop_state = file_node.loop;
+        ImGui::BeginDisabled(file_node.stream);
+        bool loop_state = file_node.stream ? false : file_node.loop;
         if (ImGui::Checkbox("loop", &loop_state)) {
             auto file_node_copy = file_node;
             file_node_copy.loop = loop_state;
@@ -77,6 +78,7 @@ view_action_type_e build_node_view(const data::file_flow_node_t& file_node, cons
             action = view_action_type_e::NODE_UPDATE;
             desc.out_data->action_data = file_node_copy;
         }
+        ImGui::EndDisabled();
 
         bool stream_state = file_node.stream;
         if (ImGui::Checkbox("stream", &stream_state)) {
