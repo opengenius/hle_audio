@@ -2546,6 +2546,7 @@ void EndNodeTitleBar()
     node.TitleBarContentRect = GetItemRect();
 
     // <--- HLEA: disable, caused width growing with imgui 1.91.5 (ImGui::EndGroup-LastItemData.Rect.Max)
+    // https://github.com/ocornut/imgui/issues/7543
     // ImGui::ItemAdd(GetNodeTitleRect(node), ImGui::GetID("title_bar"));
     // --->
 
