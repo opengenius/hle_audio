@@ -2545,7 +2545,9 @@ void EndNodeTitleBar()
     ImNodeData&           node = editor.Nodes.Pool[GImNodes->CurrentNodeIdx];
     node.TitleBarContentRect = GetItemRect();
 
-    ImGui::ItemAdd(GetNodeTitleRect(node), ImGui::GetID("title_bar"));
+    // <--- HLEA: disable, caused width growing with imgui 1.91.5 (ImGui::EndGroup-LastItemData.Rect.Max)
+    // ImGui::ItemAdd(GetNodeTitleRect(node), ImGui::GetID("title_bar"));
+    // --->
 
     ImGui::SetCursorPos(GridSpaceToEditorSpace(editor, GetNodeContentOrigin(node)));
 }

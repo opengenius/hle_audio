@@ -36,6 +36,7 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
             ImGui::PushID(i);
             auto name = get_text_at_index(ud, i);
+            ImGui::SetNextItemAllowOverlap();
             if (ImGui::Selectable(name, selected_index == i, ImGuiSelectableFlags_AllowDoubleClick)) {
                 *new_selected_index = i;
                 if (ImGui::IsMouseDoubleClicked(0) && double_clicked) {
@@ -44,9 +45,7 @@ static void ClippedListWithAddRemoveButtons(size_t elem_count, float scale, bool
             }
 
             if (selected_index == i) {
-                ImGui::SetItemAllowOverlap();
-
-                auto content_width_with_scroll = ImGui::GetContentRegionMax().x - 2 * ImGui::GetWindowContentRegionMin().x;
+                auto content_width_with_scroll = ImGui::GetContentRegionAvail().x;
                 ImGui::SameLine(content_width_with_scroll - 30 * scale);
                 if (ImGui::SmallButton("-")) {
                     *remove_pressed = true;

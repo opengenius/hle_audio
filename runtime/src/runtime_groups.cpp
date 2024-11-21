@@ -7,7 +7,6 @@
 using hle_audio::rt::named_group_t;
 using hle_audio::rt::data_buffer_t;
 using hle_audio::rt::file_data_t;
-using hle_audio::rt::node_type_e;
 using hle_audio::rt::streaming_data_source_t;
 using hle_audio::rt::streaming_data_source_init_info_t;
 using hle_audio::rt::buffer_data_source_t;

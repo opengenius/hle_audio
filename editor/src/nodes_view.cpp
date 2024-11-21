@@ -47,7 +47,7 @@ view_action_type_e build_node_view(const data::file_flow_node_t& file_node, cons
     ImGui::Text(file_name);
     ImNodes::EndNodeTitleBar();
 
-    auto title_rect_w = ImGui::GetItemRectMax().x - ImGui::GetItemRectMin().x;
+    auto title_rect_w = ImGui::GetItemRectSize().x;
     if (ENABLE_DEBUG_DRAW) {
         ImGui::GetForegroundDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 0, 0, 255));
     }

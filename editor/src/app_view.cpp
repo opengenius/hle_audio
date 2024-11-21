@@ -426,10 +426,9 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
     }
 
     int current_index = group_state.output_bus_index;
-    auto getter = [](void* data, int n, const char** out_str) {
+    auto getter = [](void* data, int n) {
         auto buses = (decltype(&data_state.output_buses))data;
-        *out_str = buses->at(n).name.c_str();
-        return true;
+        return buses->at(n).name.c_str();
     };
     auto data = (void*)&data_state.output_buses;
     if (ImGui::Combo("output bus", &current_index, 
@@ -570,6 +569,7 @@ static void build_file_list(view_state_t& mut_view_state,
 
             const float cursor_start_posx = ImGui::GetCursorPosX();
 
+            ImGui::SetNextItemAllowOverlap();
             if (ImGui::Selectable((const char*)filename.c_str(), mut_view_state.selected_sound_file_index == file_index))
                 mut_view_state.selected_sound_file_index = file_index;
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -580,7 +580,6 @@ static void build_file_list(view_state_t& mut_view_state,
                 mut_view_state.selected_sound_file_index = file_index;
             }
             if (mut_view_state.selected_sound_file_index == file_index) {
-                ImGui::SetItemAllowOverlap();
                 ImGui::SameLine();
                 ImGui::SetCursorPosX(cursor_start_posx);
 
@@ -893,10 +892,9 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
                     } else if (data::is_action_type_target_bus(ev_action.type)) {
 
                         int current_index = ev_action.target_index;
-                        auto getter = [](void* data, int n, const char** out_str) {
+                        auto getter = [](void* data, int n) {
                             auto buses = (decltype(&data_state.output_buses))data;
-                            *out_str = buses->at(n).name.c_str();
-                            return true;
+                            return buses->at(n).name.c_str();
                         };
                         auto data = (void*)&data_state.output_buses;
                         if (ImGui::Combo("bus", &current_index, 
