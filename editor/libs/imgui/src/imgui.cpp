@@ -11122,7 +11122,9 @@ void ImGui::EndGroup()
         ErrorCheckUsingSetCursorPosToExtendParentBoundaries();
 
     // Include LastItemData.Rect.Max as a workaround for e.g. EndTable() undershooting with CursorMaxPos report. (#7543)
-    ImRect group_bb(group_data.BackupCursorPos, ImMax(ImMax(window->DC.CursorMaxPos, g.LastItemData.Rect.Max), group_data.BackupCursorPos));
+    //ImRect group_bb(group_data.BackupCursorPos, ImMax(ImMax(window->DC.CursorMaxPos, g.LastItemData.Rect.Max), group_data.BackupCursorPos));
+    // hlea: reverted, cause width growing and odd paddings see: https://github.com/ocornut/imgui/issues/7543
+    ImRect group_bb(group_data.BackupCursorPos, ImMax(window->DC.CursorMaxPos, group_data.BackupCursorPos));
     window->DC.CursorPos = group_data.BackupCursorPos;
     window->DC.CursorPosPrevLine = group_data.BackupCursorPosPrevLine;
     window->DC.CursorMaxPos = ImMax(group_data.BackupCursorMaxPos, group_bb.Max);
