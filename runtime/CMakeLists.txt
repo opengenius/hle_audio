@@ -8,13 +8,13 @@ FetchContent_MakeAvailable(minimp3)
 add_library(hlea_runtime STATIC
     src/default_allocator.cpp
     src/file_api_vfs_bridge.cpp
-    src/decoder_mp3.cpp
-    src/decoder_pcm.cpp
     src/async_file_reader.cpp
-    src/push_decoder_data_source.cpp
-    src/streaming_data_source.cpp
     src/chunk_streaming_cache.cpp
-    src/buffer_data_source.cpp
+    src/decoders/decoder_mp3.cpp
+    src/decoders/decoder_pcm.cpp
+    src/data_sources/push_decoder_data_source.cpp
+    src/data_sources/streaming_data_source.cpp
+    src/data_sources/buffer_data_source.cpp
     src/runtime.cpp
     src/runtime_groups.cpp
 )
@@ -31,6 +31,7 @@ PUBLIC
     include
 PRIVATE
     ${minimp3_SOURCE_DIR}
+    src
 )
 
 if (HLEA_BUILD_EDITOR)

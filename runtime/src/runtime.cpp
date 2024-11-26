@@ -12,8 +12,6 @@
 #include "async_file_reader.h"
 #include "internal_types.h"
 #include "chunk_streaming_cache.h"
-#include "decoder_mp3.h"
-#include "decoder_pcm.h"
 
 #include "alloc_utils.inl"
 #include "jobs_utils.inl"

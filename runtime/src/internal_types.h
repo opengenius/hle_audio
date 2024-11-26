@@ -3,15 +3,16 @@
 #include <cstdint>
 #include <limits>
 #include "rt_types.h"
-#include "streaming_data_source.h"
-#include "buffer_data_source.h"
+#include "data_sources/streaming_data_source.h"
+#include "data_sources/buffer_data_source.h"
 #include "chunk_streaming_cache.h"
-#include "decoder_mp3.h"
-#include "decoder_pcm.h"
+#include "internal_jobs_types.h"
 #include "file_api_vfs_bridge.h"
 
 namespace hle_audio { namespace rt {
 struct editor_runtime_t;
+struct mp3_decoder_t;
+struct pcm_decoder_t;
 }}
 
 static const uint16_t MAX_SOUNDS = 1024;

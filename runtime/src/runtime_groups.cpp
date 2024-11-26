@@ -2,6 +2,8 @@
 #include "miniaudio_public.h"
 #include "internal_types.h"
 #include "internal_editor_runtime.h"
+#include "decoders/decoder_mp3.h"
+#include "decoders/decoder_pcm.h"
 #include <cstdlib>
 
 using hle_audio::rt::named_group_t;
