@@ -187,6 +187,22 @@ static data::vec2_t to_grid_position(ImVec2 pos) {
     };
 }
 
+static void push_link_colors(link_type_e type) {
+    if (type == link_type_e::FILTER) {
+        ImNodes::PushColorStyle(ImNodesCol_Link, FILTER_LINK_COLOR);
+        ImNodes::PushColorStyle(ImNodesCol_LinkHovered, FILTER_LINK_HOVERED_COLOR);
+        ImNodes::PushColorStyle(ImNodesCol_LinkSelected, FILTER_LINK_HOVERED_COLOR);
+    }
+}
+
+static void pop_link_colors(link_type_e type) {
+    if (type == link_type_e::FILTER) {
+        ImNodes::PopColorStyle();
+        ImNodes::PopColorStyle();
+        ImNodes::PopColorStyle();
+    }
+}
+
 static void build_node_graph(view_state_t& mut_view_state, const data_state_t& data_state, 
         view_action_type_e& action) {
     auto& data_group = get_group(&data_state, mut_view_state.active_group_index);
@@ -282,37 +298,18 @@ static void build_node_graph(view_state_t& mut_view_state, const data_state_t& d
         auto in_pin_count = get_node_in_pin_count(data_state, link.from.node);
         auto type = get_node_pin_type(&data_state, out_to_attribute_id(in_pin_count, link.from));
 
-        if (type == link_type_e::FILTER) {
-            ImNodes::PushColorStyle(ImNodesCol_Link, FILTER_LINK_COLOR);
-            ImNodes::PushColorStyle(ImNodesCol_LinkHovered, FILTER_LINK_HOVERED_COLOR);
-            ImNodes::PushColorStyle(ImNodesCol_LinkSelected, FILTER_LINK_HOVERED_COLOR);
-        }
-
+        push_link_colors(type);
         ImNodes::Link(i, 
             pack_attribute_id(out_to_attribute_id(in_pin_count, link.from)), 
             pack_attribute_id(in_to_attribute_id(link.to)));
 
-        if (type == link_type_e::FILTER) {
-            ImNodes::PopColorStyle();
-            ImNodes::PopColorStyle();
-            ImNodes::PopColorStyle();
-        }
+        pop_link_colors(type);
     }
 
     // setup colors for started link
-    bool pop_color_styles = false;
-    if (mut_view_state.modified_link_type == link_type_e::FILTER) {
-        pop_color_styles = true;
-        ImNodes::PushColorStyle(ImNodesCol_Link, FILTER_LINK_COLOR);
-        ImNodes::PushColorStyle(ImNodesCol_LinkHovered, FILTER_LINK_HOVERED_COLOR);
-        ImNodes::PushColorStyle(ImNodesCol_LinkSelected, FILTER_LINK_HOVERED_COLOR);
-    }
+    push_link_colors(mut_view_state.modified_link_type);
     ImNodes::EndNodeEditor();
-    if (pop_color_styles) {
-        ImNodes::PopColorStyle();
-        ImNodes::PopColorStyle();
-        ImNodes::PopColorStyle();
-    }
+    pop_link_colors(mut_view_state.modified_link_type);
 
     int start_attr, end_attr;
     if (ImNodes::IsLinkCreated(&start_attr, &end_attr)) {
