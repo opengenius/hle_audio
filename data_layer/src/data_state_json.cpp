@@ -211,7 +211,7 @@ static void write_node(PrettyWriter<FileWriteStream>& writer,
     {
     case FILE_FNODE_TYPE: {
         auto& file_node = get_file_node(state, node_id);
-        writer.String("file");
+        writer.String(KEY_FILE);
         writer.String((const char*)file_node.filename.c_str(), file_node.filename.length());
 
         if (file_node.loop) {

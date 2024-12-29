@@ -29,6 +29,7 @@ const auto KEY_VOLUME = "volume";
 const auto KEY_START_TIME = "start_time";
 const auto KEY_END_TIME = "end_time";
 const auto KEY_TIME = "time";
+const auto KEY_FILE = "file";
 
 }
 }
