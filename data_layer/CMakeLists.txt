@@ -27,6 +27,7 @@ add_library(hlea_data_layer STATIC
     src/data_state_json.cpp
     src/data_state_rt_blob.cpp
     src/data_state_v1.cpp
+    src/data_state_v2.cpp
 )
 
 target_compile_features(hlea_data_layer PUBLIC cxx_std_20)

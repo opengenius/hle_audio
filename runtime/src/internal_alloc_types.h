@@ -24,3 +24,8 @@ struct memory_layout_t {
     size_t size;
     size_t alignment;
 };
+
+struct tracking_allocator_t {
+    allocator_t backing_alloc;
+    int counter;
+};

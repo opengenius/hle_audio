@@ -14,6 +14,8 @@ struct build_node_view_desc_t {
 
 view_action_type_e build_node_view(const data::file_flow_node_t& file_node, const build_node_view_desc_t& desc);
 view_action_type_e build_node_view(const data::random_flow_node_t& node, const build_node_view_desc_t& desc);
+view_action_type_e build_node_view(const data::fade_flow_node_t& node, const build_node_view_desc_t& desc);
+view_action_type_e build_node_view(const data::delay_flow_node_t& node, const build_node_view_desc_t& desc);
 
 }
 }

@@ -115,7 +115,8 @@ int main(int argc, char** argv)
     ImGui::GetStyle().ScaleAllSizes(SCALE);
     ImGui::GetStyle().Colors[ImGuiCol_Button] = premultiply(ImGui::GetStyle().Colors[ImGuiCol_Button]);
     ImNodes::GetStyle().GridSpacing *= SCALE;
-    ImNodes::GetStyle().PinTriangleSideLength = 15 * SCALE;
+    ImNodes::GetStyle().PinTriangleSideLength = 12 * SCALE;
+    ImNodes::GetStyle().PinCircleRadius = 5.0 * SCALE;
     ImNodes::GetStyle().NodePadding.x = 3.0f * SCALE;
     ImNodes::GetStyle().NodePadding.y = 3.0f * SCALE;
     ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);

@@ -15,6 +15,9 @@ struct decoder_ti {
      * @brief reset inputs and outputs
      */
     void (*flush)(void* state);
+
+    // destructor, todo: move out lifecycle management out of api
+    void (*destroy)(void* state);
 };
 
 struct decoder_t {
@@ -41,6 +44,11 @@ static bool is_running(decoder_t& dec) {
 static void flush(decoder_t& dec) {
     assert(dec.vt->flush);
     dec.vt->flush(dec.state);
+}
+
+static void destroy(decoder_t& dec) {
+    assert(dec.vt->destroy);
+    dec.vt->destroy(dec.state);
 }
 
 }

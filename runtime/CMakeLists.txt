@@ -7,6 +7,7 @@ FetchContent_MakeAvailable(minimp3)
 
 add_library(hlea_runtime STATIC
     src/default_allocator.cpp
+    src/tracking_allocator.cpp
     src/file_api_vfs_bridge.cpp
     src/async_file_reader.cpp
     src/chunk_streaming_cache.cpp
@@ -15,6 +16,7 @@ add_library(hlea_runtime STATIC
     src/data_sources/push_decoder_data_source.cpp
     src/data_sources/streaming_data_source.cpp
     src/data_sources/buffer_data_source.cpp
+    src/nodes/fade_node.cpp
     src/runtime.cpp
     src/runtime_groups.cpp
 )

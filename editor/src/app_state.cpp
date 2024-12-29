@@ -15,6 +15,8 @@ using hle_audio::data::output_bus_t;
 using hle_audio::data::file_flow_node_t;
 using hle_audio::data::random_flow_node_t;
 using hle_audio::data::flow_node_type_t;
+using hle_audio::data::fade_flow_node_t;
+using hle_audio::data::delay_flow_node_t;
 
 namespace fs = std::filesystem;
 
@@ -564,13 +566,22 @@ bool process_frame(app_state_t* state) {
         auto type = bl_state->data_state.fnodes[node_action.node_id].type;
         switch (type)
         {
+        case data::FILE_FNODE_TYPE:
+            update_file_node(bl_state, node_action.node_id, 
+                    std::get<file_flow_node_t>(node_action.action_data));
+            break;
         case data::RANDOM_FNODE_TYPE:
             update_random_node(bl_state, node_action.node_id, 
                     std::get<random_flow_node_t>(node_action.action_data));
             break;
-        case data::FILE_FNODE_TYPE:
-            update_file_node(bl_state, node_action.node_id, 
-                    std::get<file_flow_node_t>(node_action.action_data));
+        case data::FADE_FNODE_TYPE:
+            update_fade_node(bl_state, node_action.node_id, 
+                    std::get<fade_flow_node_t>(node_action.action_data));
+            break;
+        case data::DELAY_FNODE_TYPE:
+            update_delay_node(bl_state, node_action.node_id, 
+                    std::get<delay_flow_node_t>(node_action.action_data));
+            break;
         default:
             break;
         }

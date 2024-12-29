@@ -134,9 +134,9 @@ inline CubicBezier GetCubicBezier(
     // <--- HLEA: make loop links look nicer
     if (0.1f < link_length) {
         ImVec2 dif = end - start;
-        float offset_factor = ImMax(0.f, -dif.x / link_length); // dot({-1;0}, dif)
-        cubic_bezier.P1 = cubic_bezier.P1 + ImVec2(0.0f, 0.5f * link_length * offset_factor);
-        cubic_bezier.P2 = cubic_bezier.P2 + ImVec2(0.0f, 0.5f * link_length * offset_factor);
+        float offset_factor = ImMax(0.f, -dif.x); // dot({-1;0}, dif)
+        cubic_bezier.P1 = cubic_bezier.P1 + ImVec2(0.0f, 0.5f * offset_factor);
+        cubic_bezier.P2 = cubic_bezier.P2 + ImVec2(0.0f, 0.5f * offset_factor);
     }
     // --->
 
@@ -912,11 +912,13 @@ bool ShouldLinkSnapToPin(
 {
     const ImPinData& end_pin = editor.Pins.Pool[hovered_pin_idx];
 
+    // <--- HLEA: disable not linking the same  pins
     // The end pin must be in a different node
-    if (start_pin.ParentNodeIdx == end_pin.ParentNodeIdx)
-    {
-        return false;
-    }
+    // if (start_pin.ParentNodeIdx == end_pin.ParentNodeIdx)
+    // {
+    //     return false;
+    // }
+    // --->
 
     // The end pin must be of a different type
     if (start_pin.Type == end_pin.Type)

@@ -69,11 +69,13 @@ struct array_view_t {
 // rt blob types
 //
 
-static const uint32_t STORE_BLOB_VERSION = 6;
+static const uint32_t STORE_BLOB_VERSION = 7;
 
 enum class node_type_e : uint8_t {
     FILE,
-    RANDOM
+    RANDOM,
+    FADE,
+    DELAY
 };
 
 struct file_node_t {
@@ -81,6 +83,8 @@ struct file_node_t {
 
     uint32_t file_index;
     uint8_t loop;
+
+    offset_t filter_node;
 
     offset_t next_node;
 };
@@ -91,10 +95,23 @@ struct random_node_t {
     array_view_t<offset_t> nodes;
 };
 
+struct fade_node_t {
+    node_type_e type = node_type_e::FADE;
+
+    float start_time;
+    float end_time;
+};
+
+struct delay_node_t {
+    node_type_e type = node_type_e::DELAY;
+
+    float time;
+    offset_t next_node;
+};
+
 struct named_group_t {
     char_offset_t name;
     float volume = 1.0;
-    float cross_fade_time = 0.0;
     uint8_t output_bus_index = 0;
     offset_t first_node_offset;
 };

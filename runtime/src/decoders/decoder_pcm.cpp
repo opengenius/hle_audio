@@ -116,6 +116,11 @@ static void pcm_dec_flush(void* state) {
     flush(dec);
 }
 
+static void pcm_dec_destroy(void* state) {
+    auto dec = (pcm_decoder_t*)state;
+    destroy(dec);
+}
+
 static const decoder_ti g_wav_decoder_vt = []() {
     decoder_ti vt = {};
     vt.release_consumed_inputs = pcm_dec_release_consumed_inputs;
@@ -123,6 +128,7 @@ static const decoder_ti g_wav_decoder_vt = []() {
     vt.next_output = pcm_dec_next_output;
     vt.is_running = pcm_dec_is_running;
     vt.flush = pcm_dec_flush;
+    vt.destroy = pcm_dec_destroy;
 
     return vt;
 }();

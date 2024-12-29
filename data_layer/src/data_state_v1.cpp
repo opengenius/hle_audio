@@ -1,5 +1,6 @@
 #include "data_state_v1.h"
 #include "data_keys.h"
+#include "data_state_v2_types.h"
 
 #include "json_utils.inl"
 
@@ -279,8 +280,8 @@ bool load_state_v1(data_state_t* state, Document& document) {
 } // namespace v1
 
 typedef struct {
-    data_state_t* state;
-    named_group_t* new_gr;
+    v2::data_state_t* state;
+    v2::named_group_t* new_gr;
     const v1::data_state_t* v1_state;
 } add_group_nodes_ctx_t;
 
@@ -335,10 +336,10 @@ static node_id_t add_group_nodes_rec(const add_group_nodes_ctx_t& ctx,
 
         if (link_last_with_first) {
             link_t l = {};
-            l.from = fnode_id;
-            l.from_pin = 0;
-            l.to = (node_to_link_last_to == invalid_node_id) ? fnode_id : node_to_link_last_to;
-            l.to_pin = 0;
+            l.from.node = fnode_id;
+            l.from.pin_index = 0;
+            l.to.node = (node_to_link_last_to == invalid_node_id) ? fnode_id : node_to_link_last_to;
+            l.to.pin_index = 0;
             ctx.new_gr->links.push_back(l);
         }
 
@@ -366,10 +367,10 @@ static node_id_t add_group_nodes_rec(const add_group_nodes_ctx_t& ctx,
                 auto ch_node_id = add_group_nodes_rec(ctx, ch_desc, x_offset + node_w, ch_y_offset, &ch_width, &ch_height, link_last_with_first, node_to_link_last_to);
 
                 link_t l = {};
-                l.from = fnode_id;
-                l.from_pin = ch_index;
-                l.to = ch_node_id;
-                l.to_pin = 0;
+                l.from.node = fnode_id;
+                l.from.pin_index = ch_index;
+                l.to.node = ch_node_id;
+                l.to.pin_index = 0;
                 ctx.new_gr->links.push_back(l);
 
                 ch_y_offset += ch_height;
@@ -406,10 +407,10 @@ static node_id_t add_group_nodes_rec(const add_group_nodes_ctx_t& ctx,
                     first_node_id = ch_node_id;
                 } else {
                     link_t l = {};
-                    l.from = prev_it_node;
-                    l.from_pin = 0;
-                    l.to = ch_node_id;
-                    l.to_pin = 0;
+                    l.from.node = prev_it_node;
+                    l.from.pin_index = 0;
+                    l.to.node = ch_node_id;
+                    l.to.pin_index = 0;
                     ctx.new_gr->links.push_back(l);
                 }
 
@@ -435,7 +436,7 @@ static node_id_t add_group_nodes_rec(const add_group_nodes_ctx_t& ctx,
     return first_node_id;
 }
 
-bool migrate_from_v1(data_state_t* state, rapidjson::Document& document) {
+bool migrate_from_v1_to_v2(v2::data_state_t* state, rapidjson::Document& document) {
     // 1st vertsion
     v1::data_state_t v1_state = {};
     init(&v1_state);
@@ -443,7 +444,7 @@ bool migrate_from_v1(data_state_t* state, rapidjson::Document& document) {
 
     // convert state
     for (auto& group : v1_state.groups) {
-        named_group_t new_gr = {};
+        v2::named_group_t new_gr = {};
         new_gr.name = group.name;
         new_gr.volume = group.volume;
         new_gr.cross_fade_time = group.cross_fade_time;

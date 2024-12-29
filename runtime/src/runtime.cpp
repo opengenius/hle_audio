@@ -8,6 +8,7 @@
 #include "miniaudio_public.h"
 
 #include "default_allocator.h"
+#include "tracking_allocator.h"
 #include "decoder.h"
 #include "async_file_reader.h"
 #include "internal_types.h"
@@ -70,14 +71,22 @@ static const hlea_jobs_ti s_task_executor_jobs_vt {
 
 hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
 
-    allocator_t alloc = hle_audio::make_default_allocator();
+    allocator_t base_alloc = hle_audio::make_default_allocator();
     if (info->allocator_vt) {
-        alloc = allocator_t{info->allocator_vt, info->allocator_udata};
+        base_alloc = allocator_t{info->allocator_vt, info->allocator_udata};
     }
 
-    auto ctx = allocate_unique<hlea_context_t>(alloc);
+    auto ctx = allocate_unique<hlea_context_t>(base_alloc);
     memset(ctx.get(), 0, sizeof(hlea_context_t));
-    ctx->allocator = alloc;
+
+    ctx->base_allocator = base_alloc;
+    ctx->allocator = base_alloc;
+
+    // track allocations in debug mode
+#ifndef NDEBUG
+    ctx->tracking_alloc.backing_alloc = base_alloc;
+    ctx->allocator = hle_audio::to_allocator(&ctx->tracking_alloc);
+#endif
 
     auto allocation_callbacks = make_allocation_callbacks(&ctx->allocator);
 
@@ -103,6 +112,7 @@ hlea_context_t* hlea_create(hlea_context_create_info_t* info) {
     for (size_t i = 0; i < ctx->output_bus_group_count; ++i) {
         // todo: check results, deinit, return nullptr
         result = ma_sound_group_init(&ctx->engine, 0, nullptr, &ctx->output_bus_groups[i]);
+        assert(result == MA_SUCCESS);
     }
     
     if (info->jobs_vt) {
@@ -150,7 +160,8 @@ void hlea_destroy(hlea_context_t* ctx) {
     }
     ma_engine_uninit(&ctx->engine);
 
-    deallocate(ctx->allocator, ctx);
+    assert(ctx->tracking_alloc.counter == 0);
+    deallocate(ctx->base_allocator, ctx);
 }
 
 void hlea_suspend(hlea_context_t* ctx) {

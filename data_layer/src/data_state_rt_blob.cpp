@@ -91,7 +91,6 @@ static rt::named_group_t make_named_group(std::vector<uint8_t>& buf,
     rt::named_group_t gr = {};
     gr.name = write(buf, data_group.name);
     gr.volume = data_group.volume;
-    gr.cross_fade_time = data_group.cross_fade_time;
     gr.output_bus_index = data_group.output_bus_index;
     gr.first_node_offset = first_node_offset;
 
@@ -161,6 +160,16 @@ static rt::offset_t find_cached_group_node_offset(save_context_t* ctx, node_id_t
     return {};
 }
 
+static node_id_t find_out_node(const named_group_t& group, node_id_t node_id, uint16_t from_pin = 0) {
+    for (auto& link : group.links) {
+        if (link.from.node == node_id && link.from.pin_index == from_pin) {
+            return link.to.node;
+        }
+    }
+
+    return invalid_node_id;
+}
+
 static rt::offset_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx, 
         const data_state_t* state, const named_group_t& group, node_id_t node_id) {
 
@@ -182,13 +191,11 @@ static rt::offset_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx
         auto res = write_single(buf, rt_node);
         cache_group_node_offset(ctx, node_id, res.pos);
 
-        node_id_t next_node_id = invalid_node_id;
-        for (auto& link : group.links) {
-            if (link.from == node_id) {
-                next_node_id = link.to;
-            }
-        }
-        
+        const uint16_t FILE_FILTER_OUT_PIN = 1;
+        node_id_t filter_node_id = find_out_node(group, node_id, FILE_FILTER_OUT_PIN);
+        rt_node.filter_node = save_node_rec(buf, ctx, state, group, filter_node_id);
+
+        node_id_t next_node_id = find_out_node(group, node_id);
         rt_node.next_node = save_node_rec(buf, ctx, state, group, next_node_id);
         write(buf, res, &rt_node, 1);
 
@@ -204,11 +211,31 @@ static rt::offset_t save_node_rec(std::vector<uint8_t>& buf, save_context_t* ctx
         auto res = write_single(buf, rt_node);
         cache_group_node_offset(ctx, node_id, res.pos);
         for (auto& link : group.links) {
-            if (link.from == node_id) {
-                dst_nodes[link.from_pin] = save_node_rec(buf, ctx, state, group, link.to);
+            if (link.from.node == node_id) {
+                dst_nodes[link.from.pin_index] = save_node_rec(buf, ctx, state, group, link.to.node);
             }
         }
         write(buf, rt_node.nodes.elements, dst_nodes.data(), dst_nodes.size());
+
+        return res.pos;
+    }
+    case FADE_FNODE_TYPE: {
+        auto& type_data = get_fade_node(state, node_id);
+
+        rt::fade_node_t rt_node = {};
+        rt_node.start_time = type_data.start_time;
+        rt_node.end_time = type_data.end_time;
+        auto res = write_single(buf, rt_node);
+
+        return res.pos;
+    }
+    case DELAY_FNODE_TYPE: {
+        auto& type_data = get_delay_node(state, node_id);
+
+        rt::delay_node_t rt_node = {};
+        rt_node.time = type_data.time;
+        rt_node.next_node = save_node_rec(buf, ctx, state, group, find_out_node(group, node_id));
+        auto res = write_single(buf, rt_node);
 
         return res.pos;
     }

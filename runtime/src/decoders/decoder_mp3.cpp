@@ -390,6 +390,11 @@ static void mp3dec_flush(void* state) {
     flush(dec);
 }
 
+static void mp3dec_destroy(void* state) {
+    auto dec = (mp3_decoder_t*)state;
+    destroy(dec);
+}
+
 static const decoder_ti g_mp3_decoder_vt = []() {
     decoder_ti vt = {};
     vt.release_consumed_inputs = mp3dec_release_consumed_inputs;
@@ -397,6 +402,7 @@ static const decoder_ti g_mp3_decoder_vt = []() {
     vt.next_output = mp3dec_next_output;
     vt.is_running = mp3dec_is_running;
     vt.flush = mp3dec_flush;
+    vt.destroy = mp3dec_destroy;
 
     return vt;
 }();

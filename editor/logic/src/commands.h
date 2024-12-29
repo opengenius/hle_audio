@@ -142,8 +142,10 @@ public:
     }
 };
 
-using node_random_update_cmd_t = update_by_index_cmd_t<data::random_flow_node_t, data::node_id_t>;
 using node_file_update_cmd_t = update_by_index_cmd_t<data::file_flow_node_t, data::node_id_t>;
+using node_random_update_cmd_t = update_by_index_cmd_t<data::random_flow_node_t, data::node_id_t>;
+using node_fade_update_cmd_t = update_by_index_cmd_t<data::fade_flow_node_t, data::node_id_t>;
+using node_delay_update_cmd_t = update_by_index_cmd_t<data::delay_flow_node_t, data::node_id_t>;
 using event_update_cmd_t = update_by_index_cmd_t<data::event_t>;
 using bus_update_cmd_t = update_by_index_cmd_t<data::output_bus_t>;
 

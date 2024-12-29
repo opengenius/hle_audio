@@ -29,6 +29,12 @@ file_flow_node_t& get_file_node_mut(data_state_t* state, node_id_t id);
 const random_flow_node_t& get_random_node(const data_state_t* state, node_id_t id);
 random_flow_node_t& get_random_node_mut(data_state_t* state, node_id_t id);
 
+const fade_flow_node_t& get_fade_node(const data_state_t* state, node_id_t id);
+fade_flow_node_t& get_fade_node_mut(data_state_t* state, node_id_t id);
+
+const delay_flow_node_t& get_delay_node(const data_state_t* state, node_id_t id);
+delay_flow_node_t& get_delay_node_mut(data_state_t* state, node_id_t id);
+
 //
 // data indexed getters
 //
@@ -45,12 +51,20 @@ static void get_ptr_by_index(data_state_t& state, size_t index, output_bus_t** o
     *out_ptr = &state.output_buses[index];
 }
 
+static void get_ptr_by_index(data_state_t& state, node_id_t id, file_flow_node_t** out_ptr) {
+    *out_ptr = &get_file_node_mut(&state, id);
+}
+
 static void get_ptr_by_index(data_state_t& state, node_id_t id, random_flow_node_t** out_ptr) {
     *out_ptr = &get_random_node_mut(&state, id);
 }
 
-static void get_ptr_by_index(data_state_t& state, node_id_t id, file_flow_node_t** out_ptr) {
-    *out_ptr = &get_file_node_mut(&state, id);
+static void get_ptr_by_index(data_state_t& state, node_id_t id, fade_flow_node_t** out_ptr) {
+    *out_ptr = &get_fade_node_mut(&state, id);
+}
+
+static void get_ptr_by_index(data_state_t& state, node_id_t id, delay_flow_node_t** out_ptr) {
+    *out_ptr = &get_delay_node_mut(&state, id);
 }
 
 }

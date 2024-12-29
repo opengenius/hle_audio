@@ -71,7 +71,9 @@ struct node_action_data_t {
         data::flow_node_type_t,  // NODE_ADD
         uint32_t,         // NODE_REMOVE
         data::file_flow_node_t, // NODE_UPDATE
-        data::random_flow_node_t
+        data::random_flow_node_t,
+        data::fade_flow_node_t,
+        data::delay_flow_node_t
         > action_data;
 };
 
@@ -118,6 +120,7 @@ struct view_state_t {
     size_t active_group_index = data::invalid_index;
     data::named_group_t selected_group_state;
     size_t selected_group_state_revison;
+    data::link_type_e modified_link_type;
 
     // event list
     std::string event_filter_str;

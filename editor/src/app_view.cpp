@@ -11,8 +11,9 @@
 using hle_audio::data::data_state_t;
 using hle_audio::data::pin_counts_t;
 using hle_audio::data::node_id_t;
+using hle_audio::data::attribute_t;
 using hle_audio::data::link_t;
-
+using hle_audio::data::link_type_e;
 
 const char* DND_SOUND_FILE_INDEX = "DND_SOUND_FILE_INDEX";
 const float PANE_ANIMATION_SPEED = 10.0f;
@@ -138,24 +139,26 @@ static view_action_type_e process_view_menu(view_state_t& mut_view_state, const 
     return action;
 }
 
-static uint16_t get_node_in_pin_count(const data_state_t& data_state, size_t node_index) {
+static uint16_t get_node_in_pin_count(const data_state_t& data_state, node_id_t node) {
     return 1;
 }
 
-static link_t attributes_to_link(const data_state_t& data_state, int start_attr, int end_attr) {
-    uint32_t start_node = start_attr & 0xFFFF;
-    uint32_t start_pin = uint32_t(start_attr) >> 16;
-    uint32_t end_node = end_attr & 0xFFFF;
-    uint32_t end_pin = uint32_t(end_attr) >> 16;
+static link_type_e get_node_pin_type(const data_state_t* state, const attribute_id_t& attr) {
+    auto node_data = get_node_data(state, attr.attr.node);
+    if (node_data.type == data::FILE_FNODE_TYPE && attr.attr.pin_index == 2u) {
+        return link_type_e::FILTER;
+    } else if (node_data.type == data::FADE_FNODE_TYPE && attr.attr.pin_index == 0) {
+        return link_type_e::FILTER;
+    }
+    return link_type_e::EXECUTION;
+}
 
-    auto in_pin_count = get_node_in_pin_count(data_state, start_node);
-    start_pin -= in_pin_count;
+static link_t attributes_to_link(const data_state_t& data_state, attribute_id_t start_attribute, attribute_id_t end_attribute) {
+    auto in_pin_count = get_node_in_pin_count(data_state, start_attribute.attr.node);
 
     link_t res = {};
-    res.from = node_id_t(start_node);
-    res.from_pin = start_pin;
-    res.to = node_id_t(end_node);
-    res.to_pin = end_pin;
+    res.from = attribute_id_to_out(in_pin_count, start_attribute);
+    res.to = attribute_id_to_in(end_attribute);
     return res;
 }
 
@@ -163,8 +166,8 @@ static void group_add_link_unique(data::named_group_t& group, const link_t& link
     // keep single out link
     for (size_t i = 0; i < group.links.size(); ++i) {
         auto& it_l = group.links[i];
-        if (it_l.from == link.from && 
-                it_l.from_pin == link.from_pin) {
+        if (it_l.from.node == link.from.node && 
+                it_l.from.pin_index == link.from.pin_index) {
             group.links[i] = link;
             return;
         }
@@ -249,8 +252,6 @@ static void build_node_graph(view_state_t& mut_view_state, const data_state_t& d
 
         bool is_start_node = (node_id == group_state.start_node);
 
-        ImNodes::BeginNode(node_id);
-
         build_node_view_desc_t desc = {};
         desc.node_id = node_id;
         desc.start_node = is_start_node;
@@ -261,6 +262,10 @@ static void build_node_graph(view_state_t& mut_view_state, const data_state_t& d
             node_action = build_node_view(get_file_node(&data_state, node_id), desc);
         } else if (node.type == data::RANDOM_FNODE_TYPE) {
             node_action = build_node_view(get_random_node(&data_state, node_id), desc);
+        } else if (node.type == data::FADE_FNODE_TYPE) {
+            node_action = build_node_view(get_fade_node(&data_state, node_id), desc);
+        } else if (node.type == data::DELAY_FNODE_TYPE) {
+            node_action = build_node_view(get_delay_node(&data_state, node_id), desc);
         }
 
         if (node_action != view_action_type_e::NONE) {
@@ -269,43 +274,69 @@ static void build_node_graph(view_state_t& mut_view_state, const data_state_t& d
             auto& out_action  = mut_view_state.node_action;
             out_action.node_id = node_id;
         }
-
-        ImNodes::EndNode();
     }
+    
     for (int i = 0; i < group_state.links.size(); ++i) {
         auto& link = group_state.links[i];
 
-        auto in_pin_count = get_node_in_pin_count(data_state, link.from);
+        auto in_pin_count = get_node_in_pin_count(data_state, link.from.node);
+        auto type = get_node_pin_type(&data_state, out_to_attribute_id(in_pin_count, link.from));
+
+        if (type == link_type_e::FILTER) {
+            ImNodes::PushColorStyle(ImNodesCol_Link, FILTER_LINK_COLOR);
+            ImNodes::PushColorStyle(ImNodesCol_LinkHovered, FILTER_LINK_HOVERED_COLOR);
+            ImNodes::PushColorStyle(ImNodesCol_LinkSelected, FILTER_LINK_HOVERED_COLOR);
+        }
+
         ImNodes::Link(i, 
-            to_attribute_id_out(in_pin_count, link.from, link.from_pin), 
-            to_attribute_id_in(link.to, link.to_pin));
+            pack_attribute_id(out_to_attribute_id(in_pin_count, link.from)), 
+            pack_attribute_id(in_to_attribute_id(link.to)));
+
+        if (type == link_type_e::FILTER) {
+            ImNodes::PopColorStyle();
+            ImNodes::PopColorStyle();
+            ImNodes::PopColorStyle();
+        }
     }
 
+    // setup colors for started link
+    bool pop_color_styles = false;
+    if (mut_view_state.modified_link_type == link_type_e::FILTER) {
+        pop_color_styles = true;
+        ImNodes::PushColorStyle(ImNodesCol_Link, FILTER_LINK_COLOR);
+        ImNodes::PushColorStyle(ImNodesCol_LinkHovered, FILTER_LINK_HOVERED_COLOR);
+        ImNodes::PushColorStyle(ImNodesCol_LinkSelected, FILTER_LINK_HOVERED_COLOR);
+    }
     ImNodes::EndNodeEditor();
+    if (pop_color_styles) {
+        ImNodes::PopColorStyle();
+        ImNodes::PopColorStyle();
+        ImNodes::PopColorStyle();
+    }
 
     int start_attr, end_attr;
     if (ImNodes::IsLinkCreated(&start_attr, &end_attr)) {
-        auto link = attributes_to_link(data_state, start_attr, end_attr);
-        group_add_link_unique(group_state, link);
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+        attribute_id_t start_attribute = unpack_attribute_id(start_attr);
+        attribute_id_t end_attribute = unpack_attribute_id(end_attr);
+
+        if (get_node_pin_type(&data_state, start_attribute) == get_node_pin_type(&data_state, end_attribute)) {
+            auto link = attributes_to_link(data_state, start_attribute, end_attribute);
+            group_add_link_unique(group_state, link);
+            action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
+        }
     }
 
-    // bool linkStarted = false;
-    // if (ImNodes::IsLinkStarted(&start_attr)) {
-    //     linkStarted = true;
-    // }
+    if (ImNodes::IsLinkStarted(&start_attr)) {
+        attribute_id_t start_attribute = unpack_attribute_id(start_attr);
+        mut_view_state.modified_link_type = get_node_pin_type(&data_state, start_attribute);
+    }
 
     int link_id;
     if (ImNodes::IsLinkDestroyed(&link_id)) {
+        mut_view_state.modified_link_type = get_node_pin_type(&data_state, in_to_attribute_id(group_state.links[link_id].to));
         group_state.links.erase(group_state.links.begin() + link_id);
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
-
-    // todo: add node with drop link
-    // if (ImNodes::IsLinkDropped(&start_attr, false)) {
-    //     static int qwe = 0;
-    //     qwe = start_attr;
-    // }
 
     if (ImNodes::IsNodesDragStopped()) {
         auto moved_count = ImNodes::NumSelectedNodes();
@@ -378,11 +409,15 @@ static void build_node_graph(view_state_t& mut_view_state, const data_state_t& d
 
         static const char* const node_type_names[] = {
             "File",
-            "Random"
+            "Random",
+            "Fade",
+            "Delay"
         };
         static const data::flow_node_type_t node_types[] = {
             data::FILE_FNODE_TYPE,
-            data::RANDOM_FNODE_TYPE
+            data::RANDOM_FNODE_TYPE,
+            data::FADE_FNODE_TYPE,
+            data::DELAY_FNODE_TYPE
         };
         for (int i = 0; i < std::size(node_type_names); i++) {
             if (ImGui::Selectable(node_type_names[i])) {
@@ -411,17 +446,6 @@ static void build_selected_group_view(view_state_t& mut_view_state, const data_s
     ImGui::SliderFloat("volume", &group_state.volume, 0.0f, 1.0f);
     if (ImGui::IsItemDeactivatedAfterEdit() &&
             data_group.volume != group_state.volume) {
-        action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
-    }
-
-    const char* time_sec_format = "%.3f";
-    const float f32_zero = 0.0f;
-    ImGui::DragScalar("cross fade time", ImGuiDataType_Float, 
-            &group_state.cross_fade_time, 
-            0.01f,  &f32_zero, nullptr,
-            time_sec_format);
-    if (ImGui::IsItemDeactivatedAfterEdit() &&
-            data_group.cross_fade_time != group_state.cross_fade_time) {
         action = view_action_type_e::APPLY_SELECTED_GROUP_UPDATE;
     }
 
@@ -751,7 +775,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         ImGui::EndChild(); // list_tabs_pane
 
         // bus edit data
-        ImGui::BeginChild("runtime_pane", ImVec2(left_pane_width, runtime_height), false, ImGuiWindowFlags_NoScrollbar);
+        ImGui::BeginChild("runtime_pane", ImVec2(left_pane_width, runtime_height), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
         if (ImGui::CollapsingHeader("Runtime", ImGuiTreeNodeFlags_DefaultOpen)) {
             auto rt_action = build_runtime_view(mut_view_state, data_state);
             if (rt_action != view_action_type_e::NONE) {
@@ -765,10 +789,12 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     }
 
     ImGui::SameLine();
-    ImGui::BeginChild("Properties pane");
+
+    // right pane
+    ImGui::BeginGroup();
 
     float bottom_height = animate_pane(&mut_view_state.bottom_pane_height_anim, mut_view_state.bottom_pane_height);
-    ImGui::BeginChild("groups_pane", ImVec2(0.0f, -bottom_height - style.WindowPadding.y));
+    ImGui::BeginChild("groups_pane", ImVec2(0.0f, -bottom_height));
     auto apply_edit_focus_on_group = mut_view_state.apply_edit_focus_on_group;
     mut_view_state.apply_edit_focus_on_group = false;
     if (active_group_index != data::invalid_index) {
@@ -942,13 +968,13 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
             if (ImGui::Button("Fire")) {
                 action = view_action_type_e::RUNTIME_FIRE_EVENT;
             }
-        }
+        }        
     }
-    
+
     mut_view_state.bottom_pane_height = ImGui::GetCursorPosY() - ImGui::GetCursorStartPos().y;
     ImGui::EndChild(); // bottom_panel
 
-    ImGui::EndChild(); // Properties pane
+    ImGui::EndGroup();
 
     //
     // Exit save dialog

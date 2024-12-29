@@ -26,6 +26,9 @@ const auto KEY_TO_PIN = "to_pin";
 const auto KEY_START = "start";
 const auto KEY_GROUPS = "groups";
 const auto KEY_VOLUME = "volume";
+const auto KEY_START_TIME = "start_time";
+const auto KEY_END_TIME = "end_time";
+const auto KEY_TIME = "time";
 
 }
 }

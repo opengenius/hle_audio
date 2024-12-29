@@ -3,12 +3,16 @@
 #include "commands.h"
 #include <cassert>
 
+
 using hle_audio::data::named_group_t;
 using hle_audio::data::event_t;
 using hle_audio::data::node_id_t;
 using hle_audio::data::output_bus_t;
 using hle_audio::data::file_flow_node_t;
 using hle_audio::data::random_flow_node_t;
+using hle_audio::data::fade_flow_node_t;
+using hle_audio::data::delay_flow_node_t;
+
 
 namespace hle_audio {
 namespace editor {
@@ -70,7 +74,12 @@ static void perform_remove_node(logic_state_t* state, size_t group_index, data::
     } else if (ndata.type == data::RANDOM_FNODE_TYPE) {
         execute_cmd(state, 
                 std::make_unique<node_random_update_cmd_t>(node, data::random_flow_node_t{}));
-
+    } else if (ndata.type == data::FADE_FNODE_TYPE) {
+        execute_cmd(state, 
+                std::make_unique<node_fade_update_cmd_t>(node, data::fade_flow_node_t{}));
+    } else if (ndata.type == data::DELAY_FNODE_TYPE) {
+        execute_cmd(state, 
+                std::make_unique<node_delay_update_cmd_t>(node, data::delay_flow_node_t{}));
     }
 
     // destroy node
@@ -126,7 +135,7 @@ void create_node(logic_state_t* state, size_t group_index, data::flow_node_type_
 static void remove_node_links(named_group_t& group, data::node_id_t node) {
     for (int i = 0; i < group.links.size(); ++i) {
         auto l = group.links[i];
-        if (l.from == node || l.to == node) {
+        if (l.from.node == node || l.to.node == node) {
             group.links[i] = group.links.back();
             group.links.pop_back();
             --i;
@@ -168,6 +177,16 @@ void update_file_node(logic_state_t* state, node_id_t node_id, const file_flow_n
 
 void update_random_node(logic_state_t* state, node_id_t node_id, const random_flow_node_t& data) {
     auto cmd = std::make_unique<node_random_update_cmd_t>(node_id, data);
+    execute_cmd_first(state, std::move(cmd));
+}
+
+void update_fade_node(logic_state_t* state, node_id_t node_id, const fade_flow_node_t& data) {
+    auto cmd = std::make_unique<node_fade_update_cmd_t>(node_id, data);
+    execute_cmd_first(state, std::move(cmd));
+}
+
+void update_delay_node(logic_state_t* state, node_id_t node_id, const delay_flow_node_t& data) {
+    auto cmd = std::make_unique<node_delay_update_cmd_t>(node_id, data);
     execute_cmd_first(state, std::move(cmd));
 }
 

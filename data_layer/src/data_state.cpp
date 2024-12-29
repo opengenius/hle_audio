@@ -71,6 +71,14 @@ node_id_t create_node(data_state_t* state, size_t group_index, flow_node_type_t 
         node_index = state->fnodes_random.add({});
         break;
     }
+    case FADE_FNODE_TYPE: {
+        node_index = state->fnodes_fade.add({});
+        break;
+    }
+    case DELAY_FNODE_TYPE: {
+        node_index = state->fnodes_delay.add({});
+        break;
+    }
     default:
         assert(false);
         break;
@@ -119,6 +127,14 @@ void destroy_node(data_state_t* state, size_t group_index, node_id_t node_id) {
         state->fnodes_random.remove(fnode.index);
         break;
     }
+    case FADE_FNODE_TYPE: {
+        state->fnodes_fade.remove(fnode.index);
+        break;
+    }
+    case DELAY_FNODE_TYPE: {
+        state->fnodes_delay.remove(fnode.index);
+        break;
+    }
     default:
         assert(false);
         break;
@@ -141,6 +157,24 @@ const random_flow_node_t& get_random_node(const data_state_t* state, node_id_t i
 
 random_flow_node_t& get_random_node_mut(data_state_t* state, node_id_t id) {
     return const_cast<random_flow_node_t&>(get_random_node(state, id));
+}
+
+const fade_flow_node_t& get_fade_node(const data_state_t* state, node_id_t id) {
+    auto node_index = get_node_data(state, id).index;
+    return state->fnodes_fade[node_index];
+}
+
+fade_flow_node_t& get_fade_node_mut(data_state_t* state, node_id_t id) {
+    return const_cast<fade_flow_node_t&>(get_fade_node(state, id));
+}
+
+const delay_flow_node_t& get_delay_node(const data_state_t* state, node_id_t id) {
+    auto node_index = get_node_data(state, id).index;
+    return state->fnodes_delay[node_index];
+}
+
+delay_flow_node_t& get_delay_node_mut(data_state_t* state, node_id_t id) {
+    return const_cast<delay_flow_node_t&>(get_delay_node(state, id));
 }
 
 }

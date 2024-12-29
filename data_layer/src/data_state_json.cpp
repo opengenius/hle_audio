@@ -7,18 +7,17 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/document.h"
 
-#include "data_state_v1.h"
+#include "data_state_v2.h"
 #include "data_state.h"
 #include "data_keys.h"
 #include "json_utils.inl"
 
-// using rapidjson::StringBuffer;
 using rapidjson::FileWriteStream;
 using rapidjson::PrettyWriter;
 using rapidjson::Document;
 using rapidjson::Value;
 
-static const uint32_t CURRENT_VERSION = 2;
+static const uint32_t CURRENT_VERSION = 3;
 
 namespace hle_audio {
 namespace data {
@@ -48,6 +47,21 @@ static node_id_t load_node(data_state_t* state, const rapidjson::Value& v, size_
         auto& node = get_random_node_mut(state, res_id);
 
         node.out_pin_count = value_get_opt_uint(v, KEY_OUT_COUNT, 1u);
+
+        break;
+    }
+    case FADE_FNODE_TYPE: {
+        auto& node = get_fade_node_mut(state, res_id);
+
+        node.start_time = value_get_opt_float(v, KEY_START_TIME);
+        node.end_time = value_get_opt_float(v, KEY_END_TIME);
+
+        break;
+    }
+    case DELAY_FNODE_TYPE: {
+        auto& node = get_delay_node_mut(state, res_id);
+
+        node.time = value_get_opt_float(v, KEY_TIME);
 
         break;
     }
@@ -81,8 +95,8 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
     document.Parse(json_buf.data(), json_buf.size());
 
     auto doc_version = value_get_opt_uint(document, KEY_VERSION, 1u);
-    if (doc_version == 1) {
-        return migrate_from_v1(state, document);
+    if (doc_version < CURRENT_VERSION) {
+        return migrate_to_v3(state, document);
     } else {
         //
         // load current version
@@ -112,7 +126,6 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
                 named_group_t group = {};
                 group.name = group_v[KEY_NAME].GetString();
                 group.volume = value_get_opt_float(group_v, KEY_VOLUME, 1.0f);
-                group.cross_fade_time = value_get_opt_float(group_v, KEY_CROSS_FADE_TIME, 0.0f);
                 group.output_bus_index = value_get_opt_uint(group_v, KEY_OUTPUT_BUS_INDEX, 0);
                 
                 state->groups.push_back(group);
@@ -137,10 +150,10 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
             assert(links_val.IsArray());
             for (auto& link_v : links_val.GetArray()) {
                 link_t l = {};
-                l.from = group_ref.nodes[link_v[KEY_FROM].GetUint()];
-                l.from_pin = link_v[KEY_FROM_PIN].GetUint();
-                l.to = group_ref.nodes[link_v[KEY_TO].GetUint()];
-                l.to_pin = link_v[KEY_TO_PIN].GetUint();
+                l.from.node = group_ref.nodes[link_v[KEY_FROM].GetUint()];
+                l.from.pin_index = link_v[KEY_FROM_PIN].GetUint();
+                l.to.node = group_ref.nodes[link_v[KEY_TO].GetUint()];
+                l.to.pin_index = link_v[KEY_TO_PIN].GetUint();
 
                 group_ref.links.push_back(l);
             }
@@ -170,6 +183,13 @@ bool load_store_json(data_state_t* state, const char* json_filename) {
 
 
     return true;
+}
+
+static void write_float(PrettyWriter<FileWriteStream>& writer, float value) {
+    double v = value;
+    v = round(v * 1000) / 1000;
+    writer.Double(v);
+
 }
 
 static void write_node(PrettyWriter<FileWriteStream>& writer,
@@ -210,6 +230,20 @@ static void write_node(PrettyWriter<FileWriteStream>& writer,
         writer.Uint(random_node.out_pin_count);
         break;
     }
+    case FADE_FNODE_TYPE: {
+        auto& fade_node = get_fade_node(state, node_id);
+        writer.String(KEY_START_TIME);
+        write_float(writer, fade_node.start_time);
+        writer.String(KEY_END_TIME);
+        write_float(writer, fade_node.end_time);
+        break;
+    }
+    case DELAY_FNODE_TYPE: {
+        auto& delay_node = get_delay_node(state, node_id);
+        writer.String(KEY_TIME);
+        write_float(writer, delay_node.time);
+        break;
+    }
 
     default:
         assert(false && "unhandled type");
@@ -236,14 +270,14 @@ static void write_link(PrettyWriter<FileWriteStream>& writer,
     writer.StartObject();
 
     writer.String(KEY_FROM);
-    writer.Uint(node_in_group_index(group, link.from));
+    writer.Uint(node_in_group_index(group, link.from.node));
     writer.String(KEY_FROM_PIN);
-    writer.Uint(link.from_pin);
+    writer.Uint(link.from.pin_index);
     
     writer.String(KEY_TO);
-    writer.Uint(node_in_group_index(group, link.to));
+    writer.Uint(node_in_group_index(group, link.to.node));
     writer.String(KEY_TO_PIN);
-    writer.Uint(link.to_pin);
+    writer.Uint(link.to.pin_index);
 
     writer.EndObject();
 }
@@ -288,21 +322,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
         // volume:float = 1.0;
         if (group.volume < 1.0f) {
             writer.String(KEY_VOLUME);
-            
-            double volume = group.volume;
-            volume = round(volume * 1000) / 1000;
-            writer.Double(volume);
-
-            // writer.SetMaxDecimalPlaces(3);
-            // writer.Double(group.volume);
-        }
-
-        if (group.cross_fade_time) {
-            writer.String(KEY_CROSS_FADE_TIME);
-
-            double fade_time = group.cross_fade_time;
-            fade_time = round(fade_time * 1000) / 1000;
-            writer.Double(fade_time);
+            write_float(writer, group.volume);
         }
 
         if (group.output_bus_index) {
@@ -358,11 +378,7 @@ void save_store_json(const data_state_t* state, const char* json_filename) {
             
             if (action.fade_time > 0.0f) {
                 writer.String(KEY_FADE_TIME);
-
-                double fade_time = action.fade_time;
-                fade_time = round(fade_time * 1000) / 1000;
-                writer.Double(fade_time);
-                // writer.Double(action->fade_time);
+                write_float(writer, action.fade_time);
             }
 
             writer.EndObject();

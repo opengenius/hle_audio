@@ -4,6 +4,10 @@
 
 namespace hle_audio {
 namespace editor {
+
+const auto FILTER_LINK_COLOR  = IM_COL32(0, 150, 0, 150);
+const auto FILTER_LINK_HOVERED_COLOR  = IM_COL32(0, 150, 0, 255);
+
 namespace imgui_utils {
 
 static bool SmallButtonAligned(const char* label, float avail, float alignment = 0.5f, float* out_size = nullptr) {
@@ -92,6 +96,27 @@ static void ClippedListWithAddRemoveButtonsFiltered(size_t elem_count, float sca
         },
         &filtered_state.list_index, 
         add_pressed, remove_pressed, double_clicked);
+}
+
+struct item_state_t {
+    ImGuiID active_item_id = {};
+    float active_value = 0.0f;
+};
+
+static bool DragFloatWithState(item_state_t* state, const char* label, float in_value, float* out_changed) {
+    ImGuiID drag_id = ImGui::GetID(label);
+    float value = (state->active_item_id == drag_id) ? state->active_value : in_value;
+    if (ImGui::DragFloat(label, &value, 0.01f)) {
+        state->active_item_id = drag_id;
+        state->active_value = value;
+    }
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+        state->active_item_id = {};
+        *out_changed = value;
+        return true;
+    }
+
+    return false;
 }
 
 }

@@ -19,22 +19,28 @@ struct output_bus_t {
     std::string name;
 };
 
-enum flow_node_type_t : uint8_t;
+enum flow_node_type_t : uint8_t {
+    INVALID = 0,
+    FILE_FNODE_TYPE,
+    RANDOM_FNODE_TYPE,
+    FADE_FNODE_TYPE,
+    DELAY_FNODE_TYPE
+};
 
 const size_t invalid_index = ~0;
 const auto invalid_file_index = (uint16_t)~0u;
 const node_id_t invalid_node_id = {};
-const flow_node_type_t invalid_node_type = {};
-
-static const flow_node_type_t FILE_FNODE_TYPE = flow_node_type_t(1);
-static const flow_node_type_t RANDOM_FNODE_TYPE = flow_node_type_t(2);
+const flow_node_type_t invalid_node_type = flow_node_type_t::INVALID;
 
 static const char* c_flow_node_type_names[] = {
     "",
     "File",
-    "Random"
+    "Random",
+    "Fade",
+    "Delay"
 };
 static const char* flow_node_type_name(flow_node_type_t type) {
+    assert(uint8_t(type) < std::size(c_flow_node_type_names));
     return c_flow_node_type_names[uint8_t(type)];
 }
 static flow_node_type_t flow_node_type_from_str(const char* str) {
@@ -49,6 +55,9 @@ static flow_node_type_t flow_node_type_from_str(const char* str) {
 }
 
 struct file_flow_node_t {
+    static const uint16_t NEXT_NODE_OUT_PIN = 0;
+    static const uint16_t FILTER_OUT_PIN = 1;
+
     std::u8string filename;
     bool loop = false;
     bool stream = false;
@@ -58,17 +67,35 @@ struct random_flow_node_t {
     uint16_t out_pin_count = 2;
 };
 
+struct fade_flow_node_t {
+    float start_time;
+    float end_time;
+};
+
+struct delay_flow_node_t {
+    static const uint16_t NEXT_NODE_OUT_PIN = 0;
+    
+    float time;
+};
+
+struct attribute_t {
+    node_id_t node;
+    uint16_t pin_index;
+};
+
 struct link_t {
-    node_id_t from;
-    uint16_t from_pin;
-    node_id_t to;
-    uint16_t to_pin;
+    attribute_t from;
+    attribute_t to;
+};
+
+enum class link_type_e : uint8_t {
+    EXECUTION,
+    FILTER
 };
 
 struct named_group_t {
     std::string name = {};
     float volume = 1.0f;
-    float cross_fade_time = 0.0f;
     uint8_t output_bus_index = 0;
     node_id_t start_node;
     std::vector<node_id_t> nodes;
@@ -99,6 +126,8 @@ struct data_state_t {
     utils::sparse_vector<common_flow_node_t> fnodes;
     utils::sparse_vector<file_flow_node_t> fnodes_file;
     utils::sparse_vector<random_flow_node_t> fnodes_random;
+    utils::sparse_vector<fade_flow_node_t> fnodes_fade;
+    utils::sparse_vector<delay_flow_node_t> fnodes_delay;
 
     std::vector<output_bus_t> output_buses;
 };

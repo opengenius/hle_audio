@@ -6,7 +6,11 @@
 namespace hle_audio {
 namespace data {
 
-bool migrate_from_v1(data_state_t* state, rapidjson::Document& document);
+namespace v2 {
+    struct data_state_t;
+}
+
+bool migrate_from_v1_to_v2(v2::data_state_t* state, rapidjson::Document& document);
 
 }
 }

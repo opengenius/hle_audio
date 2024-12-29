@@ -30,6 +30,9 @@ void update_file_node(logic_state_t* state, data::node_id_t node_id, const data:
 
 void update_random_node(logic_state_t* state, data::node_id_t node_id, const data::random_flow_node_t& data);
 
+void update_fade_node(logic_state_t* state, data::node_id_t node_id, const data::fade_flow_node_t& data);
+void update_delay_node(logic_state_t* state, data::node_id_t node_id, const data::delay_flow_node_t& data);
+
 void move_nodes(logic_state_t* state, std::span<const data::node_id_t> node_ids, std::span<const data::vec2_t> positions);
 
 void create_event(logic_state_t* state, size_t index);
