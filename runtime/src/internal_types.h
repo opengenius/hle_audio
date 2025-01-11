@@ -95,10 +95,10 @@ struct event_desc_t {
     float fade_time;
 };
 
-template<typename T, size_t ARRAY_SIZE, typename CountType>
+template<typename T, size_t ARRAY_SIZE_T, typename CountType>
 struct array_with_size_t {
-    static_assert(ARRAY_SIZE <= std::numeric_limits<CountType>::max(), "CountType is not enough to store ARRAY_SIZE");
-    static const size_t ARRAY_SIZE = ARRAY_SIZE;
+    static_assert(ARRAY_SIZE_T <= std::numeric_limits<CountType>::max(), "CountType is not enough to store ARRAY_SIZE_T");
+    static const size_t ARRAY_SIZE = ARRAY_SIZE_T;
 
     T vec[ARRAY_SIZE];
     CountType size;
