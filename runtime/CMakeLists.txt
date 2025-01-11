@@ -48,4 +48,9 @@ if (HLEA_BUILD_EDITOR)
         hlea_rt_libs
         runtime_data_types
     )
+
+    target_include_directories(hlea_runtime_editor
+    PRIVATE
+        src
+    )
 endif()
