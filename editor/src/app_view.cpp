@@ -652,8 +652,8 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
         
         float runtime_height = animate_pane(&mut_view_state.runtime_pane_height_anim, mut_view_state.runtime_pane_height);
 
-        ImGui::BeginChild("left_pane", ImVec2(left_pane_width, 0.0f));
-        ImGui::BeginChild("list_tabs_pane", ImVec2(0.0f, -runtime_height - style.WindowPadding.y));
+        ImGui::BeginChild("left_pane", ImVec2(left_pane_width, 0.0f), 0, ImGuiWindowFlags_NoScrollbar);
+        ImGui::BeginChild("list_tabs_pane", ImVec2(0.0f, -runtime_height));
         if (ImGui::BeginTabBar("root_objects", ImGuiTabBarFlags_None)) {
 
             //
@@ -818,7 +818,7 @@ view_action_type_e build_view(view_state_t& mut_view_state, const data_state_t& 
     }
     ImGui::EndChild(); // groups_pane
 
-    ImGui::BeginChild("bottom_panel", ImVec2(), false, ImGuiWindowFlags_NoScrollbar);
+    ImGui::BeginChild("bottom_panel", ImVec2(), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
     auto apply_edit_focus_on_event = mut_view_state.apply_edit_focus_on_event;
     mut_view_state.apply_edit_focus_on_event = false;
             
