@@ -10,6 +10,7 @@ enable_testing()
 
 option(HLEA_BUILD_EDITOR "Enable the build of editor app." ON)
 option(HLEA_BUILD_TOOL "Enable the build of cli app to compile bank binary." ON)
+option(HLEA_BENCHMARKS "Build becnhmarks" OFF)
 
 #
 # Source modules
@@ -39,4 +40,7 @@ if (HLEA_BUILD_EDITOR)
 endif()
 if (HLEA_BUILD_TOOL)
   add_subdirectory(tool)
+endif()
+if (HLEA_BENCHMARKS)
+  add_subdirectory(benchmark)
 endif()
