@@ -92,6 +92,7 @@ namespace fs = std::filesystem;
 
 static std::vector<uint8_t> read_file(const fs::path& file_path) {
     if (!fs::exists(file_path)) return {};
+    if (!fs::is_regular_file(fs::canonical(file_path))) return {};
 
     auto fsize = fs::file_size(file_path);
 
