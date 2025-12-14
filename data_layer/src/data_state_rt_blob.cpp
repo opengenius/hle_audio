@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 #include "internal/memory_utils.inl"
 
 namespace hle_audio {
@@ -307,6 +308,10 @@ std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_fil
             auto content_data = fdata.content.data() + fdata.data_chunk_range.offset;
             auto content_data_size = fdata.data_chunk_range.size;
 
+            if (!content_data_size) {
+                std::cout << "warning: No input file: " << (const char*)sound_file_data.filename.data() << '\n';
+            }
+
             rt::file_data_t rt_fd = {};
             rt_fd.meta = fdata.meta;
             rt_fd.meta.stream = stream ? 1 : 0;
@@ -314,8 +319,10 @@ std::vector<uint8_t> save_store_blob_buffer(const data_state_t* state, audio_fil
                 rt_fd.data_buffer = write(buf, content_data, content_data_size);
             } else if (streaming_file) {
                 auto start_offset = ftell(streaming_file);
-                auto written = fwrite(content_data, content_data_size, 1, streaming_file);
-                assert(written == 1 && "write fully");
+                if (content_data_size) {
+                    auto written = fwrite(content_data, content_data_size, 1, streaming_file);
+                    assert(written == 1 && "write fully");
+                }
 
                 rt::array_view_t<uint8_t> buf_range = {};
                 buf_range.count = content_data_size;
