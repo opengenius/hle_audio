@@ -1,7 +1,6 @@
 FetchContent_Declare(minimp3
     GIT_REPOSITORY https://github.com/lieff/minimp3.git
     GIT_TAG        afb604c06bc8beb145fecd42c0ceb5bda8795144
-    GIT_SHALLOW    ON
 )
 FetchContent_MakeAvailable(minimp3)
 
