@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.20.0...3.24.0)
+cmake_minimum_required(VERSION 3.30)
+cmake_policy(SET CMP0168 NEW) # faster build with FetchContent
 
 project(HLE_AUDIO
   VERSION 0.7.0
